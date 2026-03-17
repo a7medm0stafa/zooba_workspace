@@ -1,0 +1,44 @@
+running egg_info
+creating ../../build/perception/perception.egg-info
+writing ../../build/perception/perception.egg-info/PKG-INFO
+writing dependency_links to ../../build/perception/perception.egg-info/dependency_links.txt
+writing entry points to ../../build/perception/perception.egg-info/entry_points.txt
+writing requirements to ../../build/perception/perception.egg-info/requires.txt
+writing top-level names to ../../build/perception/perception.egg-info/top_level.txt
+writing manifest file '../../build/perception/perception.egg-info/SOURCES.txt'
+reading manifest file '../../build/perception/perception.egg-info/SOURCES.txt'
+writing manifest file '../../build/perception/perception.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/ahmed/autonomous_ws/build/perception/build
+creating /home/ahmed/autonomous_ws/build/perception/build/lib
+creating /home/ahmed/autonomous_ws/build/perception/build/lib/perception
+copying perception/__init__.py -> /home/ahmed/autonomous_ws/build/perception/build/lib/perception
+creating /home/ahmed/autonomous_ws/build/perception/build/lib/perception/nodes
+copying perception/nodes/sign_detection_node.py -> /home/ahmed/autonomous_ws/build/perception/build/lib/perception/nodes
+copying perception/nodes/__init__.py -> /home/ahmed/autonomous_ws/build/perception/build/lib/perception/nodes
+copying perception/nodes/vehicle_actuator_node.py -> /home/ahmed/autonomous_ws/build/perception/build/lib/perception/nodes
+running install
+running install_lib
+creating /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception
+copying /home/ahmed/autonomous_ws/build/perception/build/lib/perception/__init__.py -> /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception
+creating /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception/nodes
+copying /home/ahmed/autonomous_ws/build/perception/build/lib/perception/nodes/sign_detection_node.py -> /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception/nodes
+copying /home/ahmed/autonomous_ws/build/perception/build/lib/perception/nodes/__init__.py -> /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception/nodes
+copying /home/ahmed/autonomous_ws/build/perception/build/lib/perception/nodes/vehicle_actuator_node.py -> /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception/nodes
+byte-compiling /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception/__init__.py to __init__.cpython-312.pyc
+byte-compiling /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception/nodes/sign_detection_node.py to sign_detection_node.cpython-312.pyc
+byte-compiling /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception/nodes/__init__.py to __init__.cpython-312.pyc
+byte-compiling /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception/nodes/vehicle_actuator_node.py to vehicle_actuator_node.cpython-312.pyc
+running install_data
+creating /home/ahmed/autonomous_ws/install/perception/share/ament_index
+creating /home/ahmed/autonomous_ws/install/perception/share/ament_index/resource_index
+creating /home/ahmed/autonomous_ws/install/perception/share/ament_index/resource_index/packages
+copying resource/perception -> /home/ahmed/autonomous_ws/install/perception/share/ament_index/resource_index/packages
+copying package.xml -> /home/ahmed/autonomous_ws/install/perception/share/perception
+running install_egg_info
+Copying ../../build/perception/perception.egg-info to /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception-0.0.0-py3.12.egg-info
+running install_scripts
+Installing sign_detection_node script to /home/ahmed/autonomous_ws/install/perception/lib/perception
+Installing vehicle_actuator_node script to /home/ahmed/autonomous_ws/install/perception/lib/perception
+writing list of installed files to '/home/ahmed/autonomous_ws/build/perception/install.log'

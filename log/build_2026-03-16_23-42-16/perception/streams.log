@@ -1,0 +1,46 @@
+[0.833s] Invoking command in '/home/ahmed/autonomous_ws/src/perception': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/ahmed/autonomous_ws/build/perception/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/perception build --build-base /home/ahmed/autonomous_ws/build/perception/build install --record /home/ahmed/autonomous_ws/build/perception/install.log --single-version-externally-managed install_data
+[1.111s] running egg_info
+[1.111s] creating ../../build/perception/perception.egg-info
+[1.133s] writing ../../build/perception/perception.egg-info/PKG-INFO
+[1.133s] writing dependency_links to ../../build/perception/perception.egg-info/dependency_links.txt
+[1.133s] writing entry points to ../../build/perception/perception.egg-info/entry_points.txt
+[1.133s] writing requirements to ../../build/perception/perception.egg-info/requires.txt
+[1.133s] writing top-level names to ../../build/perception/perception.egg-info/top_level.txt
+[1.133s] writing manifest file '../../build/perception/perception.egg-info/SOURCES.txt'
+[1.176s] reading manifest file '../../build/perception/perception.egg-info/SOURCES.txt'
+[1.177s] writing manifest file '../../build/perception/perception.egg-info/SOURCES.txt'
+[1.177s] running build
+[1.177s] running build_py
+[1.178s] creating /home/ahmed/autonomous_ws/build/perception/build
+[1.178s] creating /home/ahmed/autonomous_ws/build/perception/build/lib
+[1.178s] creating /home/ahmed/autonomous_ws/build/perception/build/lib/perception
+[1.178s] copying perception/__init__.py -> /home/ahmed/autonomous_ws/build/perception/build/lib/perception
+[1.178s] creating /home/ahmed/autonomous_ws/build/perception/build/lib/perception/nodes
+[1.178s] copying perception/nodes/sign_detection_node.py -> /home/ahmed/autonomous_ws/build/perception/build/lib/perception/nodes
+[1.178s] copying perception/nodes/__init__.py -> /home/ahmed/autonomous_ws/build/perception/build/lib/perception/nodes
+[1.178s] copying perception/nodes/vehicle_actuator_node.py -> /home/ahmed/autonomous_ws/build/perception/build/lib/perception/nodes
+[1.178s] running install
+[1.183s] running install_lib
+[1.205s] creating /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception
+[1.205s] copying /home/ahmed/autonomous_ws/build/perception/build/lib/perception/__init__.py -> /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception
+[1.205s] creating /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception/nodes
+[1.205s] copying /home/ahmed/autonomous_ws/build/perception/build/lib/perception/nodes/sign_detection_node.py -> /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception/nodes
+[1.206s] copying /home/ahmed/autonomous_ws/build/perception/build/lib/perception/nodes/__init__.py -> /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception/nodes
+[1.206s] copying /home/ahmed/autonomous_ws/build/perception/build/lib/perception/nodes/vehicle_actuator_node.py -> /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception/nodes
+[1.206s] byte-compiling /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception/__init__.py to __init__.cpython-312.pyc
+[1.206s] byte-compiling /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception/nodes/sign_detection_node.py to sign_detection_node.cpython-312.pyc
+[1.208s] byte-compiling /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception/nodes/__init__.py to __init__.cpython-312.pyc
+[1.208s] byte-compiling /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception/nodes/vehicle_actuator_node.py to vehicle_actuator_node.cpython-312.pyc
+[1.208s] running install_data
+[1.208s] creating /home/ahmed/autonomous_ws/install/perception/share/ament_index
+[1.208s] creating /home/ahmed/autonomous_ws/install/perception/share/ament_index/resource_index
+[1.208s] creating /home/ahmed/autonomous_ws/install/perception/share/ament_index/resource_index/packages
+[1.209s] copying resource/perception -> /home/ahmed/autonomous_ws/install/perception/share/ament_index/resource_index/packages
+[1.209s] copying package.xml -> /home/ahmed/autonomous_ws/install/perception/share/perception
+[1.209s] running install_egg_info
+[1.232s] Copying ../../build/perception/perception.egg-info to /home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages/perception-0.0.0-py3.12.egg-info
+[1.233s] running install_scripts
+[1.381s] Installing sign_detection_node script to /home/ahmed/autonomous_ws/install/perception/lib/perception
+[1.381s] Installing vehicle_actuator_node script to /home/ahmed/autonomous_ws/install/perception/lib/perception
+[1.382s] writing list of installed files to '/home/ahmed/autonomous_ws/build/perception/install.log'
+[1.409s] Invoked command in '/home/ahmed/autonomous_ws/src/perception' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/ahmed/autonomous_ws/build/perception/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/ahmed/autonomous_ws/install/perception/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/perception build --build-base /home/ahmed/autonomous_ws/build/perception/build install --record /home/ahmed/autonomous_ws/build/perception/install.log --single-version-externally-managed install_data

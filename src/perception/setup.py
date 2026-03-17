@@ -15,7 +15,7 @@ setup(
     zip_safe=True,
     maintainer='ahmed',
     maintainer_email='ahm.mostafa03@gmail.com',
-    description='TODO: Package description',
+    description='perception package for traffic sign detection and vehicle actuation',
     license='TODO: License declaration',
     extras_require={
         'test': [
