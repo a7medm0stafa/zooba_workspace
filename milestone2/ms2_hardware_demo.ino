@@ -32,6 +32,15 @@ void loop()
       stopMotor();
     }
 
+    // YELLOW → MOVE
+    if (command == 'Y')
+    {
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);
+    analogWrite(EN, 80);
+    } 
+    }
+
     // GREEN → MOVE
     if (command == 'G')
     {
