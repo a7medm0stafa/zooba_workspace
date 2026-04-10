@@ -1,0 +1,3 @@
+[submodule "src/gazebo_ackermann_steering_vehicle"]
+	path = src/gazebo_ackermann_steering_vehicle
+	url = https://github.com/lucasmazzetto/gazebo_ackermann_steering_vehicle.git
