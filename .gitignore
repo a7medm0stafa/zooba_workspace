@@ -1,0 +1,17 @@
+# ROS 2 workspace generated directories
+build/
+install/
+log/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE configurations
+.vscode/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
