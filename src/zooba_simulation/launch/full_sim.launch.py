@@ -28,6 +28,11 @@ def generate_launch_description():
         description='Gazebo world file'
     )
 
+    teleop_type_arg = DeclareLaunchArgument(
+        'teleop_type', default_value='keyboard',
+        description='Type of teleop to run (keyboard or joy)'
+    )
+
     # ---- Include simulation launch (Gazebo + bridge) ----
     sim_pkg = get_package_share_directory('zooba_simulation')
     simulation_launch = IncludeLaunchDescription(
@@ -44,11 +49,15 @@ def generate_launch_description():
     mid_level_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(mid_pkg, 'launch', 'mid_level_controller.launch.py')
-        )
+        ),
+        launch_arguments={
+            'teleop_type': LaunchConfiguration('teleop_type'),
+        }.items()
     )
 
     return LaunchDescription([
         world_arg,
+        teleop_type_arg,
         simulation_launch,
         mid_level_launch,
     ])
