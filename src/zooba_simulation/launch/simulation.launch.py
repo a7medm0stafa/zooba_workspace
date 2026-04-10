@@ -1,11 +1,10 @@
 """
-Launch file for the Gazebo simulation with the bridge node and open-loop control.
+Launch file for the Gazebo simulation with open-loop control.
 
 Launches:
     - gazebo_ackermann_steering_vehicle vehicle.launch.py (Gazebo + vehicle model)
     - sim_bridge_node (VehicleCmd → Float64 conversion)
-    - open_loop_node  (constant VehicleCmd publisher)
-    - nonholonomic_constraints_node (raw → constrained commands)
+    - open_loop_node  (constant VehicleCmd publisher → /vehicle/cmd)
 
 Usage:
     ros2 launch zooba_simulation simulation.launch.py
@@ -45,11 +44,11 @@ def generate_launch_description():
 
     # ---- Open-loop response arguments ----
     open_loop_velocity_arg = DeclareLaunchArgument(
-        'open_loop_velocity', default_value='0.8',
+        'open_loop_velocity', default_value='1.0',
         description='Open-loop velocity command [m/s]'
     )
     open_loop_heading_arg = DeclareLaunchArgument(
-        'open_loop_heading', default_value='10.0',
+        'open_loop_heading', default_value='15.0',
         description='Open-loop steering heading [degrees]'
     )
     open_loop_rate_arg = DeclareLaunchArgument(
@@ -91,7 +90,7 @@ def generate_launch_description():
         }],
     )
 
-    # ---- Open-loop response node ----
+    # ---- Open-loop response node (publishes directly to /vehicle/cmd) ----
     open_loop_node = Node(
         package='mid_level_controller',
         executable='open_loop_node',
@@ -102,20 +101,8 @@ def generate_launch_description():
             'heading': LaunchConfiguration('open_loop_heading'),
             'publish_rate': LaunchConfiguration('open_loop_rate'),
             'duration': LaunchConfiguration('open_loop_duration'),
-            'output_topic': '/teleop/raw_cmd',
+            'output_topic': '/vehicle/cmd',
         }],
-    )
-
-    # ---- Non-holonomic constraints node ----
-    mid_pkg = get_package_share_directory('mid_level_controller')
-    constraints_config = os.path.join(mid_pkg, 'config', 'vehicle_constraints.yaml')
-
-    constraints_node = Node(
-        package='mid_level_controller',
-        executable='nonholonomic_constraints_node',
-        name='nonholonomic_constraints_node',
-        output='screen',
-        parameters=[constraints_config],
     )
 
     return LaunchDescription([
@@ -133,6 +120,4 @@ def generate_launch_description():
         vehicle_launch,
         sim_bridge_node,
         open_loop_node,
-        constraints_node,
     ])
-
