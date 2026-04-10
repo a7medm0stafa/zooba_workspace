@@ -1,8 +1,0 @@
-Metadata-Version: 2.1
-Name: perception
-Version: 0.0.0
-Summary: perception package for traffic sign detection and vehicle actuation
-Maintainer: ahmed
-Maintainer-email: ahm.mostafa03@gmail.com
-License: TODO: License declaration
-Provides-Extra: test
