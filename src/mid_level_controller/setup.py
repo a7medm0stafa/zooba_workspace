@@ -34,6 +34,7 @@ setup(
         'console_scripts': [
             'teleop_keyboard_node = mid_level_controller.teleop_keyboard_node:main',
             'nonholonomic_constraints_node = mid_level_controller.nonholonomic_constraints_node:main',
+            'open_loop_node = mid_level_controller.open_loop_node:main',
         ],
     },
 )
