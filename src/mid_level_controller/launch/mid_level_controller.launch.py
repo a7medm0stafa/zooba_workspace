@@ -38,9 +38,9 @@ def generate_launch_description():
         prefix='xterm -e',
         parameters=[{
             'output_topic': '/teleop/raw_cmd',
-            'publish_rate': 10.0,
-            'velocity_step': 0.1,
-            'heading_step': 5.0,
+            'publish_rate': 0.0,
+            'velocity_step': 0.0,
+            'heading_step': 0.0,
             'max_velocity': 2.0,
             'max_heading': 35.0,
         }],

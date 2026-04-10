@@ -10,5 +10,6 @@
     "/home/moustafaahmed13/ros2_ws/build/Autonomous_Systems_Project_Team_17",
     "/home/moustafaahmed13/ros2_ws/install/Autonomous_Systems_Project_Team_17/lib/python3.12/site-packages",
     "/opt/ros/jazzy/lib/python3.12/site-packages"
-  ]
+  ],
+  "cmake.sourceDirectory": "/home/ahmed/zooba_workspace/src/gazebo_ackermann_steering_vehicle"
 }
