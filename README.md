@@ -1,166 +1,202 @@
-# Autonomous Perception and Action System (1:10 Scale Vehicle)
+# Zooba — Autonomous Perception and Action System (1:10 Scale Vehicle)
 
-This repository contains the perception and decision-to-actuation pipeline for a 1:10 scale autonomous vehicle.
-
-The project goal is to use the onboard camera to detect traffic lights and road signs, then command the vehicle to perform the correct behavior in real time.
-
-All embedded processing is intended to run on a **Raspberry Pi 4B** mounted on the vehicle.
-
-## Project Objective
-
-Develop a complete onboard autonomous perception-and-action stack that can:
-- detect traffic lights,
-- detect traffic signs,
-- interpret detected signals,
-- issue appropriate control commands to the vehicle.
-
-Target behaviors include (not limited to):
-- stop,
-- go,
-- slow down,
-- turn left,
-- turn right,
-- U-turn,
-- and other maneuver commands based on road signs and light states.
+This repository contains the full autonomous stack for a 1:10 scale vehicle:
+perception, mid-level control, low-level actuation, and Gazebo simulation.
 
 ## System Architecture
 
-Data flow:
+```
+                     ┌─────────────────────────────────┐
+                     │      Mid-Level Controller        │
+                     │                                  │
+  ┌──────────┐       │  teleop_keyboard_node             │
+  │Perception│       │    ↓  /teleop/raw_cmd             │
+  │  (sign   ├──────►│  nonholonomic_constraints_node    │
+  │detection)│future │    ↓  /vehicle/cmd                │
+  └──────────┘       └────┬────────────────┬────────────┘
+                          │                │
+               ┌──────────▼──┐     ┌───────▼─────────────┐
+               │  Low-Level  │     │    Simulation        │
+               │  Controller │     │                      │
+               │  (serial →  │     │  sim_bridge_node     │
+               │   Arduino)  │     │    ↓ /steering_angle │
+               └─────────────┘     │    ↓ /velocity       │
+                                   │  Gazebo Ackermann    │
+                                   │  Vehicle Model       │
+                                   └─────────────────────┘
+```
 
-`Onboard Camera -> Perception Node(s) -> Decision/Command Topic(s) -> Actuation Node(s) -> Motor/Steering Controller`
-
-Current implementation in this repository:
-
-`USB Camera -> sign_detection_node -> /vehicle/command (std_msgs/String) -> vehicle_actuator_node -> Arduino (Serial) -> Motor Driver`
-
-ROS 2 nodes currently in this package:
-- `sign_detection_node`
-  - Captures frames from camera index `0`
-  - Applies preprocessing (ROI crop, resize, brightness, CLAHE, blur)
-  - Performs HSV color segmentation for red/yellow/green traffic light detection
-  - Publishes command strings on `vehicle/command`
-- `vehicle_actuator_node`
-  - Subscribes to `vehicle/command`
-  - Opens serial port `/dev/ttyACM0` at `9600` baud
-  - Sends one-letter control codes to Arduino (`R`, `Y`, `G`, `O`)
+**Data flow:**
+1. `teleop_keyboard_node` reads keyboard, publishes raw commands on `/teleop/raw_cmd`
+2. `nonholonomic_constraints_node` enforces Ackermann kinematics (rate limiting, steering/velocity bounds), publishes on `/vehicle/cmd`
+3. Both **low-level controller** (Arduino serial) and **simulation** (Gazebo bridge) subscribe to `/vehicle/cmd`
 
 ## Repository Structure
 
-- `src/perception/`
-  - ROS 2 package source
-  - `perception/nodes/sign_detection_node.py`
-  - `perception/nodes/vehicle_actuator_node.py`
-- `milestone2/ms2_hardware_demo.ino`
-  - Example Arduino firmware used for hardware interfacing tests
-- `build/`, `install/`, `log/`
-  - Colcon-generated build artifacts
+```
+zooba_workspace/
+├── src/
+│   ├── vehicle_interfaces/       # Custom ROS 2 messages
+│   │   └── msg/
+│   │       ├── VehicleCmd.msg           # velocity + heading command
+│   │       ├── VehicleConstraints.msg   # constraint diagnostics
+│   │       └── VehicleFeedback.msg      # encoder feedback
+│   │
+│   ├── mid_level_controller/     # Teleop + constraint enforcement
+│   │   ├── mid_level_controller/
+│   │   │   ├── teleop_keyboard_node.py
+│   │   │   └── nonholonomic_constraints_node.py
+│   │   ├── config/
+│   │   │   └── vehicle_constraints.yaml
+│   │   └── launch/
+│   │       ├── teleop.launch.py
+│   │       └── mid_level_controller.launch.py
+│   │
+│   ├── low_level_controller/     # Serial bridge to Arduino
+│   │   ├── low_level_controller/
+│   │   │   └── low_level_controller_node.py
+│   │   └── launch/
+│   │       └── low_level_controller.launch.py
+│   │
+│   ├── perception/               # Camera-based sign detection
+│   │   └── perception/
+│   │       └── nodes/
+│   │           ├── sign_detection_node.py
+│   │           └── vehicle_actuator_node.py
+│   │
+│   └── zooba_simulation/         # Gazebo simulation
+│       ├── zooba_simulation/
+│       │   └── sim_bridge_node.py
+│       ├── external/
+│       │   └── gazebo_ackermann_steering_vehicle/  (git submodule)
+│       └── launch/
+│           ├── simulation.launch.py
+│           └── full_sim.launch.py
+│
+└── firmware/                     # Arduino firmware
+```
 
-## Software and Hardware Requirements
+## ROS 2 Topics
 
-Software:
-- Ubuntu Linux
-- ROS 2 (tested in ament Python package workflow)
-- Python 3.12 (workspace build output indicates Python 3.12)
-- OpenCV (`cv2`)
-- NumPy
-- PySerial
+| Topic | Message Type | Publisher | Subscribers |
+|-------|-------------|-----------|-------------|
+| `/teleop/raw_cmd` | `VehicleCmd` | teleop_keyboard_node | nonholonomic_constraints_node |
+| `/vehicle/cmd` | `VehicleCmd` | nonholonomic_constraints_node | low_level_controller_node, sim_bridge_node |
+| `/vehicle/feedback` | `VehicleFeedback` | low_level_controller_node | — |
+| `/vehicle/constraints` | `VehicleConstraints` | nonholonomic_constraints_node | — |
+| `/steering_angle` | `Float64` | sim_bridge_node | vehicle_controller (Gazebo) |
+| `/velocity` | `Float64` | sim_bridge_node | vehicle_controller (Gazebo) |
 
-ROS 2 package dependencies (from `package.xml`):
-- `rclpy`
-- `sensor_msgs`
-- `std_msgs`
-- `cv_bridge`
+## Software Requirements
 
-Embedded compute and hardware:
-- Raspberry Pi 4B (on-vehicle processing target)
-- 1:10 scale vehicle chassis
-- USB camera
-- Arduino board connected via USB serial
-- Motor driver and DC motor
+- Ubuntu 24.04
+- ROS 2 Jazzy Jalisco
+- Gazebo Harmonic (for simulation)
+- Python 3.12
+- OpenCV, NumPy, PySerial
+
+Additional ROS 2 packages for simulation:
+```bash
+sudo apt install -y \
+  ros-jazzy-ros2-controllers \
+  ros-jazzy-gz-ros2-control \
+  ros-jazzy-ros-gz \
+  ros-jazzy-ros-gz-bridge \
+  ros-jazzy-joint-state-publisher \
+  ros-jazzy-robot-state-publisher \
+  ros-jazzy-xacro \
+  ros-jazzy-joy
+```
 
 ## Build Instructions
 
-From workspace root:
-
 ```bash
-cd /home/ahmed/autonomous_ws
-colcon build --packages-select perception
+cd /home/ahmed/zooba_workspace
+source /opt/ros/jazzy/setup.bash
+
+# Initialize submodules (first time only)
+git submodule update --init --recursive
+
+# Build all packages
+colcon build
 source install/setup.bash
 ```
 
 ## Run Instructions
 
-Use separate terminals after sourcing the workspace in each terminal.
+### Full Simulation (Teleop + Gazebo)
 
-Terminal 1:
-
+One command to launch everything:
 ```bash
-cd /home/ahmed/autonomous_ws
-source install/setup.bash
-ros2 run perception sign_detection_node
+ros2 launch zooba_simulation full_sim.launch.py
 ```
 
-Terminal 2:
+This starts:
+- Gazebo with the Ackermann vehicle model
+- Simulation bridge node
+- Keyboard teleop (opens in xterm window)
+- Non-holonomic constraints enforcement
+
+### Simulation Only (no teleop)
 
 ```bash
-cd /home/ahmed/autonomous_ws
-source install/setup.bash
-ros2 run perception vehicle_actuator_node
+ros2 launch zooba_simulation simulation.launch.py
 ```
 
-Optional monitoring terminal:
-
+Then publish commands manually:
 ```bash
-cd /home/ahmed/autonomous_ws
-source install/setup.bash
-ros2 topic echo /vehicle/command
+ros2 topic pub /vehicle/cmd vehicle_interfaces/msg/VehicleCmd \
+  "{velocity: 1.0, heading: 10.0}"
 ```
 
-## Arduino Serial Command Interface
+### Teleop Only (for real vehicle)
 
-`vehicle_actuator_node` writes the following bytes:
-- `R` -> stop motor
-- `Y` -> slow motor speed
-- `G` -> normal move speed
-- `O` -> no signal / idle fallback
+Terminal 1 — Mid-level controller:
+```bash
+ros2 launch mid_level_controller mid_level_controller.launch.py
+```
 
-Baud rate: `9600`
+Terminal 2 — Low-level controller:
+```bash
+ros2 launch low_level_controller low_level_controller.launch.py
+```
 
-Default serial port in node code: `/dev/ttyACM0`
+### Teleop Keyboard Controls
 
-If your board appears on a different device path (`/dev/ttyUSB0`, etc.), update the path in:
-- `src/perception/perception/nodes/vehicle_actuator_node.py`
+| Key | Action |
+|-----|--------|
+| `W` / `↑` | Increase velocity |
+| `S` / `↓` | Decrease velocity |
+| `A` / `←` | Steer left |
+| `D` / `→` | Steer right |
+| `Space` | Emergency stop |
+| `Q` | Quit |
 
-## Integration Notes
+## Non-Holonomic Constraints
 
-Recommended checklist when integrating into a larger autonomous stack:
-1. Keep this package under the main project `src/` directory as `perception`.
-2. Verify ROS 2 environment consistency (same distro and Python environment) across modules.
-3. Align topic names and message contracts with planner/controller modules.
-4. Add launch files to start perception and actuator nodes together.
-5. Externalize camera index, sign/light thresholds, and serial port into ROS parameters.
+The `nonholonomic_constraints_node` enforces:
+- **Velocity clamping**: `|v| ≤ max_velocity` (default: 2.0 m/s)
+- **Steering clamping**: `|δ| ≤ max_steering_angle` (default: 35°)
+- **Velocity rate limiting**: smooth acceleration/deceleration
+- **Steering rate limiting**: smooth steering transitions
+- **Minimum turning radius**: `R_min = wheelbase / tan(max_steering_angle)`
 
-## Current Limitations
+Parameters are configured in `config/vehicle_constraints.yaml`.
 
-- Camera index and serial port are hardcoded.
-- Current perception logic focuses on traffic light color detection.
-- General traffic sign detection and maneuver classification are not fully implemented yet.
-- HSV thresholds are fixed and may need retuning for different lighting.
-- No formal launch file yet.
-- No automated integration tests for camera/serial hardware-in-the-loop.
+## Arduino Serial Interface
 
-## Suggested Next Improvements
+`low_level_controller_node` sends frames: `<direction>,<pwm>,<servo_angle>\n`
+- Direction: `1` = forward, `0` = reverse
+- PWM: `0–255`
+- Servo: angle in degrees
 
-1. Add ROS 2 parameters for all runtime-tuned values.
-2. Add a launch file (`perception.launch.py`) to start both nodes together.
-3. Extend perception to classify road signs (stop, turn left/right, U-turn, speed/slow zones).
-4. Add a command arbitration layer for sign and traffic-light priorities.
-5. Replace simple pixel-count logic with region-based detection and confidence checks.
-6. Add logging rate control and optional debug image publishing.
+Default serial port: `/dev/ttyACM0` at `115200` baud.
 
-## Project Scope Summary
+## Project Scope
 
-This project targets end-to-end autonomous behavior on a 1:10 scale vehicle by combining:
-- onboard visual perception (camera),
-- embedded inference/processing (Raspberry Pi 4B),
-- and real-time command execution (actuation interface).
+End-to-end autonomous behavior on a 1:10 scale vehicle combining:
+- Onboard visual perception (camera)
+- Mid-level control with non-holonomic constraint enforcement
+- Embedded inference/processing (Raspberry Pi 4B)
+- Real-time command execution (actuation interface)
+- Gazebo simulation for development and testing
