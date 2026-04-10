@@ -1,3 +1,14 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "ROS2.distro": "jazzy",
+  "python.autoComplete.extraPaths": [
+    "/home/moustafaahmed13/ros2_ws/build/Autonomous_Systems_Project_Team_17",
+    "/home/moustafaahmed13/ros2_ws/install/Autonomous_Systems_Project_Team_17/lib/python3.12/site-packages",
+    "/opt/ros/jazzy/lib/python3.12/site-packages"
+  ],
+  "python.analysis.extraPaths": [
+    "/home/moustafaahmed13/ros2_ws/build/Autonomous_Systems_Project_Team_17",
+    "/home/moustafaahmed13/ros2_ws/install/Autonomous_Systems_Project_Team_17/lib/python3.12/site-packages",
+    "/opt/ros/jazzy/lib/python3.12/site-packages"
+  ]
 }
