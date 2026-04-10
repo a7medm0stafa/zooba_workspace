@@ -1,14 +1,19 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.defaultInterpreterPath": "/usr/bin/python3.12",
   "ROS2.distro": "jazzy",
   "python.autoComplete.extraPaths": [
-    "/home/moustafaahmed13/ros2_ws/build/Autonomous_Systems_Project_Team_17",
-    "/home/moustafaahmed13/ros2_ws/install/Autonomous_Systems_Project_Team_17/lib/python3.12/site-packages",
-    "/opt/ros/jazzy/lib/python3.12/site-packages"
+    "/opt/ros/jazzy/lib/python3.12/site-packages",
+    "/opt/ros/jazzy/local/lib/python3.12/dist-packages",
+    "/home/ahmed/zooba_workspace/install/zooba_simulation/lib/python3.12/site-packages",
+    "/home/ahmed/zooba_workspace/install/mid_level_controller/lib/python3.12/site-packages",
+    "/home/ahmed/zooba_workspace/install/low_level_controller/lib/python3.12/site-packages"
   ],
   "python.analysis.extraPaths": [
-    "/home/moustafaahmed13/ros2_ws/build/Autonomous_Systems_Project_Team_17",
-    "/home/moustafaahmed13/ros2_ws/install/Autonomous_Systems_Project_Team_17/lib/python3.12/site-packages",
-    "/opt/ros/jazzy/lib/python3.12/site-packages"
-  ]
+    "/opt/ros/jazzy/lib/python3.12/site-packages",
+    "/opt/ros/jazzy/local/lib/python3.12/dist-packages",
+    "/home/ahmed/zooba_workspace/install/zooba_simulation/lib/python3.12/site-packages",
+    "/home/ahmed/zooba_workspace/install/mid_level_controller/lib/python3.12/site-packages",
+    "/home/ahmed/zooba_workspace/install/low_level_controller/lib/python3.12/site-packages"
+  ],
+  "cmake.sourceDirectory": "${workspaceFolder}/src/gazebo_ackermann_steering_vehicle"
 }
