@@ -78,6 +78,7 @@ class TrafficLightDetectorNode(Node):
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         
+        
         if not self.cap.isOpened():
             self.get_logger().error("Cannot open camera hardware (VideoCapture 0)")
         
@@ -232,6 +233,9 @@ class TrafficLightDetectorNode(Node):
         if not ret:
             self.get_logger().warn("Failed to grab frame from camera")
             return
+
+        # Flip the frame to correct for the upside-down physical camera mount (180 degree rotation)
+        frame = cv2.flip(frame, -1)
 
         t_start = time.time()
 
