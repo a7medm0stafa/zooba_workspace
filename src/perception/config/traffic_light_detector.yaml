@@ -43,3 +43,5 @@ traffic_light_detector_node:
     # ── Stream ───────────────────────────────────────────────────
     processing_rate: 8.0      # Pipeline processing rate in Hz (Lowered to save Pi CPU)
     show_debug_display: true   # Whether to show the OpenCV debug windows locally
+    processing_rate: 20.0      # Pipeline processing rate (Hz)
+    show_debug_display: false   # Whether to show the OpenCV debug windows locally
