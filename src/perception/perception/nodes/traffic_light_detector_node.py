@@ -72,7 +72,8 @@ class TrafficLightDetectorNode(Node):
         self._declare_parameters()
 
         # -- Hardware Camera Capture -----------------------------------
-        self.cap = cv2.VideoCapture(0)
+        # Using CAP_V4L2 explicitly prevents GStreamer memory allocation errors on Raspberry Pi
+        self.cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         
