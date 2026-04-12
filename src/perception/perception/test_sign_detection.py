@@ -50,11 +50,11 @@ class SignDetector:
         self.max_area = 120000
 
         # Shape approximation factor for cv2.approxPolyDP
-        self.epsilon_factor = 0.03
+        self.epsilon_factor = 0.02
 
         # Temporal voting
-        self.vote_window = 7
-        self.vote_threshold = 4        # need 4/7 agreeing frames
+        self.vote_window = 15
+        self.vote_threshold = 11        # need 11/15 agreeing frames
         self.history = deque(maxlen=self.vote_window)
 
     # ── preprocessing ────────────────────────────────────
@@ -76,7 +76,7 @@ class SignDetector:
         img = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
         # Gentle blur
-        img = cv2.GaussianBlur(img, (5, 5), 0)
+        img = cv2.GaussianBlur(img, (3, 3), 0)
         return img
 
     # ── main pipeline ────────────────────────────────────
@@ -142,50 +142,33 @@ class SignDetector:
     # ── arrow direction ──────────────────────────────────
 
     def _arrow_direction(self, roi):
-        """Determine LEFT or RIGHT from the white arrow inside a blue ROI."""
+        """Determine LEFT or RIGHT based strictly on pixel mass distribution."""
         if roi.size == 0 or roi.shape[0] < 20 or roi.shape[1] < 20:
             return None
 
-        # Isolate white / bright pixels (the arrow)
+        # 1. Pre-processing
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        _, white = cv2.threshold(gray, 160, 255, cv2.THRESH_BINARY)
-
-        kern = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        # 140 is a "sweet spot" to keep the arrow solid without picking up blue noise
+        _, white = cv2.threshold(gray, 140, 255, cv2.THRESH_BINARY)
+        
+        # Smooth the arrow to fill any gaps
+        kern = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
         white = cv2.morphologyEx(white, cv2.MORPH_CLOSE, kern)
-        white = cv2.morphologyEx(white, cv2.MORPH_OPEN,  kern)
 
-        # Sanity check
-        n_white = cv2.countNonZero(white)
-        total   = white.shape[0] * white.shape[1]
-        if n_white < total * 0.05 or n_white > total * 0.85:
+        h, w = white.shape
+
+        left_pixels  = cv2.countNonZero(white[:, :w//2])
+        right_pixels = cv2.countNonZero(white[:, w//2:])
+        total = left_pixels + right_pixels
+        if total == 0:
             return None
+        ratio = (left_pixels - right_pixels) / total
+        if ratio > 0.05:
+            return 'LEFT'
+        elif ratio < -0.05:
+            return 'RIGHT'
 
-        # ---- Method 1: convex-hull tip sharpness --------
-        contours, _ = cv2.findContours(white, cv2.RETR_EXTERNAL,
-                                       cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            return None
-
-        biggest = max(contours, key=cv2.contourArea)
-        hull_pts = cv2.convexHull(biggest).squeeze()
-        if hull_pts.ndim != 2 or len(hull_pts) < 5:
-            return self._arrow_by_mass(white)       # fallback
-
-        # Find leftmost & rightmost hull vertices
-        li = int(np.argmin(hull_pts[:, 0]))
-        ri = int(np.argmax(hull_pts[:, 0]))
-        n  = len(hull_pts)
-
-        left_angle  = self._hull_angle(hull_pts, li, n)
-        right_angle = self._hull_angle(hull_pts, ri, n)
-
-        # Sharper angle (smaller value) = arrowhead tip
-        diff = right_angle - left_angle
-        if abs(diff) > 10:                       # 10° minimum margin
-            return 'LEFT' if left_angle < right_angle else 'RIGHT'
-
-        # ---- Method 2: mass distribution fallback -------
-        return self._arrow_by_mass(white)
+        return None
 
     @staticmethod
     def _hull_angle(pts, idx, n):
@@ -202,16 +185,23 @@ class SignDetector:
     def _arrow_by_mass(white_mask):
         """Fallback: compare white-pixel mass in left vs right half."""
         h, w = white_mask.shape
+        # Use np.sum or cv2.countNonZero (countNonZero is faster on Pi)
         left_mass  = np.sum(white_mask[:, :w//2].astype(float))
         right_mass = np.sum(white_mask[:, w//2:].astype(float))
         total = left_mass + right_mass
+        
         if total == 0:
             return None
+            
         ratio = (left_mass - right_mass) / total
-        if ratio > 0.15:
+        
+        # --- ADJUSTED THRESHOLD ---
+        # 0.05 means a 5% difference is enough to trigger a turn
+        if ratio > 0.05:
             return 'LEFT'
-        elif ratio < -0.15:
+        elif ratio < -0.05:
             return 'RIGHT'
+            
         return None
 
     # ── shared helpers ───────────────────────────────────
@@ -260,7 +250,7 @@ class SignDetector:
         else:
             self.history.append('NO_SIGN')
 
-        if len(self.history) < 3:
+        if len(self.history) < 5:
             return 'NO_SIGN', 0.0
 
         counts = {}
@@ -370,6 +360,7 @@ def main():
     while True:
         t0 = time.time()
         ok, frame = cap.read()
+        frame = cv2.flip(frame, 1)
         if not ok:
             break
 
