@@ -1,102 +1,74 @@
-# Zooba — Autonomous Perception and Action System (1:10 Scale Vehicle)
+# Zooba — Autonomous 1:10 Scale Vehicle
 
-This repository contains the full autonomous stack for a 1:10 scale vehicle:
-perception, mid-level control, low-level actuation, and Gazebo simulation.
+## Project Overview
 
-## System Architecture
+Welcome to the **Zooba Autonomous Perception and Action System**. The ultimate goal of this project is to build a fully autonomous 1:10 scale vehicle capable of making real-time, intelligent decisions such as dynamic obstacle avoidance, path planning, and environment mapping. 
 
-```
+The project is actively being developed. **Coming soon:** We will be integrating a complete *onboard localization system* to give the vehicle spatial awareness within its environment.
+
+## Work Done So Far
+
+We have currently established the foundation for both the physical hardware platform and a 1:1 digital twin in a simulated environment:
+- **Simulation Environment:** A fully functional Gazebo Harmonic simulation implementing an Ackermann steering model.
+- **Mid-Level Control:** A modular control system that handles raw teleoperation inputs and enforces non-holonomic constraints (limiting max speeds, angles, and acceleration rates) tailored to the vehicle's physical limits.
+- **Teleoperation:** Support for both keyboard control and Bluetooth Joystick (PS4/PS5) teleoperation.
+- **Low-Level Hardware Control:** A serial bridge communicating seamlessly between the Raspberry Pi 4B (running ROS 2) and an Arduino Uno.
+- **Actuation:** Firmware interpreting serial commands to actuate a JGA-370 DC motor via an L298N H-Bridge and an MG995 steering servo.
+
+---
+
+## Hardware Setup & Connections
+
+The current hardware stack relies on the following major components:
+- **Compute:** Raspberry Pi 4B (Main ROS 2 brain) connected via USB Serial to an Arduino Uno (Low-level hardware controller).
+- **Power:** 12V 5A DC Power Supply.
+- **Drive Engine:** 12V JGA-370 DC Motor with encoder, driven by an L298N H-Bridge.
+- **Steering:** MG995 Servo Motor.
+
+**Wiring Notes:**
+* The 12V supply powers the L298N motor driver.
+* **Important:** The MG995 servo runs strictly on 6V. Ensure a step-down Buck Converter (e.g., LM2596) is used to step the 12V down to 6V for the servo. Running the servo entirely on 12V will severely damage the Arduino via backward voltage leaks.
+* The L298N `ENA`, `IN1`, and `IN2` logic pins connect to the Arduino's PWM digital pins (as defined in the Arduino firmware).
+* A common ground is shared between the Arduino, L298N, Servo, and the Buck Converter/Power Supply.
+
+---
+
+## Software Architecture
+
+```text
                      ┌─────────────────────────────────┐
-                     │      Mid-Level Controller        │
-                     │                                  │
-  ┌──────────┐       │  teleop_keyboard_node             │
-  │Perception│       │    ↓  /teleop/raw_cmd             │
-  │  (sign   ├──────►│  nonholonomic_constraints_node    │
-  │detection)│future │    ↓  /vehicle/cmd                │
-  └──────────┘       └────┬────────────────┬────────────┘
+                     │      Mid-Level Controller       │
+                     │                                 │
+  ┌──────────┐       │  teleop_keyboard_node / joy     │
+  │Perception│       │    ↓  /teleop/raw_cmd           │
+  │  (sign   ├──────►│  nonholonomic_constraints_node  │
+  │detection)│future │    ↓  /vehicle/cmd              │
+  └──────────┘       └────┬────────────────┬───────────┘
                           │                │
                ┌──────────▼──┐     ┌───────▼─────────────┐
-               │  Low-Level  │     │    Simulation        │
-               │  Controller │     │                      │
-               │  (serial →  │     │  sim_bridge_node     │
-               │   Arduino)  │     │    ↓ /steering_angle │
-               └─────────────┘     │    ↓ /velocity       │
-                                   │  Gazebo Ackermann    │
-                                   │  Vehicle Model       │
+               │  Low-Level  │     │    Simulation       │
+               │  Controller │     │                     │
+               │  (serial →  │     │  sim_bridge_node    │
+               │   Arduino)  │     │    ↓ /steering_angle│
+               └─────────────┘     │    ↓ /velocity      │
+                                   │  Gazebo Ackermann   │
+                                   │  Vehicle Model      │
                                    └─────────────────────┘
 ```
 
-**Data flow:**
-1. `teleop_keyboard_node` reads keyboard, publishes raw commands on `/teleop/raw_cmd`
-2. `nonholonomic_constraints_node` enforces Ackermann kinematics (rate limiting, steering/velocity bounds), publishes on `/vehicle/cmd`
-3. Both **low-level controller** (Arduino serial) and **simulation** (Gazebo bridge) subscribe to `/vehicle/cmd`
+---
 
-## Repository Structure
+## Software Setup Instructions
 
-```
-zooba_workspace/
-├── src/
-│   ├── vehicle_interfaces/       # Custom ROS 2 messages
-│   │   └── msg/
-│   │       ├── VehicleCmd.msg           # velocity + heading command
-│   │       ├── VehicleConstraints.msg   # constraint diagnostics
-│   │       └── VehicleFeedback.msg      # encoder feedback
-│   │
-│   ├── mid_level_controller/     # Teleop + constraint enforcement
-│   │   ├── mid_level_controller/
-│   │   │   ├── teleop_keyboard_node.py
-│   │   │   └── nonholonomic_constraints_node.py
-│   │   ├── config/
-│   │   │   └── vehicle_constraints.yaml
-│   │   └── launch/
-│   │       ├── teleop.launch.py
-│   │       └── mid_level_controller.launch.py
-│   │
-│   ├── low_level_controller/     # Serial bridge to Arduino
-│   │   ├── low_level_controller/
-│   │   │   └── low_level_controller_node.py
-│   │   └── launch/
-│   │       └── low_level_controller.launch.py
-│   │
-│   ├── perception/               # Camera-based sign detection
-│   │   └── perception/
-│   │       └── nodes/
-│   │           ├── sign_detection_node.py
-│   │           └── vehicle_actuator_node.py
-│   │
-│   └── zooba_simulation/         # Gazebo simulation
-│       ├── zooba_simulation/
-│       │   └── sim_bridge_node.py
-│       ├── external/
-│       │   └── gazebo_ackermann_steering_vehicle/  (git submodule)
-│       └── launch/
-│           ├── simulation.launch.py
-│           └── full_sim.launch.py
-│
-└── firmware/                     # Arduino firmware
-```
-
-## ROS 2 Topics
-
-| Topic | Message Type | Publisher | Subscribers |
-|-------|-------------|-----------|-------------|
-| `/teleop/raw_cmd` | `VehicleCmd` | teleop_keyboard_node | nonholonomic_constraints_node |
-| `/vehicle/cmd` | `VehicleCmd` | nonholonomic_constraints_node | low_level_controller_node, sim_bridge_node |
-| `/vehicle/feedback` | `VehicleFeedback` | low_level_controller_node | — |
-| `/vehicle/constraints` | `VehicleConstraints` | nonholonomic_constraints_node | — |
-| `/steering_angle` | `Float64` | sim_bridge_node | vehicle_controller (Gazebo) |
-| `/velocity` | `Float64` | sim_bridge_node | vehicle_controller (Gazebo) |
-
-## Software Requirements
-
+**Prerequisites:**
 - Ubuntu 24.04
 - ROS 2 Jazzy Jalisco
-- Gazebo Harmonic (for simulation)
-- Python 3.12
-- OpenCV, NumPy, PySerial
+- Gazebo Harmonic
+- Python 3.12 (with OpenCV, NumPy, PySerial)
 
-Additional ROS 2 packages for simulation:
+**Install required ROS 2 dependencies:**
 ```bash
+sudo apt update
 sudo apt install -y \
   ros-jazzy-ros2-controllers \
   ros-jazzy-gz-ros2-control \
@@ -108,95 +80,79 @@ sudo apt install -y \
   ros-jazzy-joy
 ```
 
-## Build Instructions
-
+**Build the Workspace:**
 ```bash
-cd /home/ahmed/zooba_workspace
+cd ~/zooba_workspace
 source /opt/ros/jazzy/setup.bash
 
-# Initialize submodules (first time only)
+# Ensure external submodules are checked out
 git submodule update --init --recursive
 
-# Build all packages
+# Build and source
 colcon build
 source install/setup.bash
 ```
 
-## Run Instructions
+---
 
-### Full Simulation (Teleop + Gazebo)
+## How to Use the Vehicle
 
-One command to launch everything:
+### 1. Running the Digital Twin (Simulation)
+
+You can launch the full simulation (Gazebo + Controller stack) with one command. By default, it expects keyboard input.
+
+**Keyboard Control:**
 ```bash
 ros2 launch zooba_simulation full_sim.launch.py
 ```
+*(This opens a small `xterm` window. Ensure the window is focused to capture `W`,`A`,`S`,`D` and `Space` commands).*
 
-This starts:
-- Gazebo with the Ackermann vehicle model
-- Simulation bridge node
-- Keyboard teleop (opens in xterm window)
-- Non-holonomic constraints enforcement
-
-### Simulation Only (no teleop)
-
+**Joystick Control (PS4 / PS5):**
+Connect your joystick via Bluetooth to the computer and run:
 ```bash
-ros2 launch zooba_simulation simulation.launch.py
+ros2 launch zooba_simulation full_sim.launch.py teleop_type:=joy
 ```
 
-Then publish commands manually:
+---
+
+### 2. Running on the Physical Hardware
+
+When running on the real car, launch the Low-Level serial bridge alongside the Mid-Level controller.
+
+**Terminal 1 — Mid-Level Controller (Joy/Keyboard + Constraints):**
 ```bash
-ros2 topic pub /vehicle/cmd vehicle_interfaces/msg/VehicleCmd \
-  "{velocity: 1.0, heading: 10.0}"
+# For Joystick
+ros2 launch mid_level_controller mid_level_controller.launch.py teleop_type:=joy
+
+# OR For Keyboard
+ros2 launch mid_level_controller mid_level_controller.launch.py 
 ```
 
-### Teleop Only (for real vehicle)
-
-Terminal 1 — Mid-level controller:
-```bash
-ros2 launch mid_level_controller mid_level_controller.launch.py
-```
-
-Terminal 2 — Low-level controller:
+**Terminal 2 — Low-Level Controller (Send commands to Arduino):**
 ```bash
 ros2 launch low_level_controller low_level_controller.launch.py
 ```
 
-### Teleop Keyboard Controls
+### Teleoperation Controls Mapping
 
-| Key | Action |
-|-----|--------|
-| `W` / `↑` | Increase velocity |
-| `S` / `↓` | Decrease velocity |
-| `A` / `←` | Steer left |
-| `D` / `→` | Steer right |
-| `Space` | Emergency stop |
-| `Q` | Quit |
+**Keyboard:**
+* `W` / `S`: Accelerate Forward / Backward
+* `A` / `D`: Steer Left / Right
+* `Space`: Emergency Stop
+* `Q`: Quit
 
-## Non-Holonomic Constraints
+**Joystick (Default Layout):**
+* `R2` / `RT`: Accelerate
+* `L2` / `LT`: Brake / Reverse
+* `Left Stick (Horizontal)`: Steering
+* `X` / `A`: Emergency Stop
+* `Circle` / `B`: Release Emergency Stop
 
-The `nonholonomic_constraints_node` enforces:
-- **Velocity clamping**: `|v| ≤ max_velocity` (default: 2.0 m/s)
-- **Steering clamping**: `|δ| ≤ max_steering_angle` (default: 35°)
-- **Velocity rate limiting**: smooth acceleration/deceleration
-- **Steering rate limiting**: smooth steering transitions
-- **Minimum turning radius**: `R_min = wheelbase / tan(max_steering_angle)`
+---
 
-Parameters are configured in `config/vehicle_constraints.yaml`.
+## Configurations
 
-## Arduino Serial Interface
-
-`low_level_controller_node` sends frames: `<direction>,<pwm>,<servo_angle>\n`
-- Direction: `1` = forward, `0` = reverse
-- PWM: `0–255`
-- Servo: angle in degrees
-
-Default serial port: `/dev/ttyACM0` at `115200` baud.
-
-## Project Scope
-
-End-to-end autonomous behavior on a 1:10 scale vehicle combining:
-- Onboard visual perception (camera)
-- Mid-level control with non-holonomic constraint enforcement
-- Embedded inference/processing (Raspberry Pi 4B)
-- Real-time command execution (actuation interface)
-- Gazebo simulation for development and testing
+If the car feels sluggish or you need to unlock higher speeds, edit the constraints parameter file: `/src/mid_level_controller/config/vehicle_constraints.yaml`. 
+* **`max_velocity_rate`**: Determines how punchy the acceleration is.
+* **`max_steering_rate`**: Determines how fast the servo sweeps from center to max.
+* **`max_velocity`**: Top forward/reverse speed limits. (Ensure `teleop.launch.py` matches these limits).
