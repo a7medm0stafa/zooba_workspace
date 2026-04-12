@@ -73,21 +73,16 @@ class TrafficLightDetectorNode(Node):
         # -- Declare every configurable parameter ----------------------
         self._declare_parameters()
 
+        # -- Hardware Camera Capture -----------------------------------
+        self.cap = cv2.VideoCapture(0)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        
+        if not self.cap.isOpened():
+            self.get_logger().error("Cannot open camera hardware (VideoCapture 0)")
+        
         # -- CvBridge --------------------------------------------------
         self.bridge = CvBridge()
-
-        # -- Subscriber (best-effort, keep-last 1 — always freshest) ---
-        sub_qos = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=1
-        )
-        self.image_sub = self.create_subscription(
-            Image,
-            '/camera/image_raw',
-            self._image_callback,
-            sub_qos
-        )
 
         # -- Publishers ------------------------------------------------
         self.state_pub = self.create_publisher(
@@ -220,24 +215,6 @@ class TrafficLightDetectorNode(Node):
         return self.get_parameter(name).value
 
     # ===================================================================
-    # Subscriber callback (lightweight — just latch the frame)
-    # ===================================================================
-
-    def _image_callback(self, msg: Image):
-        """
-        Store the latest camera frame for processing by the timer.
-
-        This callback is intentionally fast — no pipeline work happens here.
-        """
-        try:
-            self.latest_frame = self.bridge.imgmsg_to_cv2(
-                msg, desired_encoding='bgr8'
-            )
-            self.frame_stamp = time.time()
-        except Exception as e:
-            self.get_logger().error(f'cv_bridge conversion failed: {e}')
-
-    # ===================================================================
     # Processing timer callback (runs the pipeline)
     # ===================================================================
 
@@ -245,19 +222,17 @@ class TrafficLightDetectorNode(Node):
         """
         Timer-driven processing loop.
 
-        Grabs the latest frame, decides between DETECTION and TRACKING
+        Captures hardware frame, decides between DETECTION and TRACKING
         modes, runs the appropriate pipeline, and publishes results.
         """
-        # Skip if no frame has arrived yet
-        if self.latest_frame is None:
+        if not self.cap.isOpened():
+            return
+            
+        ret, frame = self.cap.read()
+        if not ret:
+            self.get_logger().warn("Failed to grab frame from camera")
             return
 
-        # Skip if we already processed this frame (stale)
-        if self.frame_stamp == self.last_processed_stamp:
-            return
-        self.last_processed_stamp = self.frame_stamp
-
-        frame = self.latest_frame.copy()
         t_start = time.time()
 
         # -- 1. Preprocessing ------------------------------------------
@@ -283,6 +258,11 @@ class TrafficLightDetectorNode(Node):
         debug_img = self._draw_debug(
             frame, roi_offset, circles, cluster_info, confirmed_state
         )
+        
+        # Display locally via OpenCV
+        cv2.imshow("Traffic Light Detector Debug", debug_img)
+        cv2.waitKey(1)
+        
         try:
             self.debug_pub.publish(
                 self.bridge.cv2_to_imgmsg(debug_img, encoding='bgr8')
@@ -914,6 +894,9 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        if hasattr(node, 'cap') and node.cap.isOpened():
+            node.cap.release()
+        cv2.destroyAllWindows()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
