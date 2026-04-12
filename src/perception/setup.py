@@ -25,7 +25,6 @@ setup(
     entry_points={
         'console_scripts': [
             'sign_detection_node = perception.nodes.sign_detection_node:main',
-            'vehicle_actuator_node = perception.nodes.vehicle_actuator_node:main',
         ],
     },
 )
