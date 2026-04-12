@@ -55,8 +55,8 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'output_topic': LaunchConfiguration('output_topic'),
-            'max_velocity': 2.0,
-            'max_heading': 35.0,
+            'max_velocity': 6.0,
+            'max_heading': 45.0,
             'axis_steering': 0,
             'axis_forward': 5, # R2/RT
             'axis_reverse': 2, # L2/LT

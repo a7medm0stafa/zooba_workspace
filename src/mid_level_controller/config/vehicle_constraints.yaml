@@ -4,17 +4,17 @@
 nonholonomic_constraints_node:
   ros__parameters:
     # Vehicle geometry
-    wheelbase: 0.22            # Distance between front and rear axles [m]
-    track_width: 0.20          # Distance between left and right wheels [m]
-    wheel_radius: 0.04         # Wheel radius [m]
+    wheelbase: 0.22 # Distance between front and rear axles [m]
+    track_width: 0.20 # Distance between left and right wheels [m]
+    wheel_radius: 0.04 # Wheel radius [m]
 
     # Velocity constraints
-    max_velocity: 4.0          # Maximum forward/reverse speed [m/s]
-    max_velocity_rate: 6.0     # Maximum acceleration [m/s²]
+    max_velocity: 6.0 # Maximum forward/reverse speed [m/s]
+    max_velocity_rate: 10.0 # Maximum acceleration [m/s²]
 
     # Steering constraints
-    max_steering_angle: 45.0   # Maximum steering angle [degrees]
-    max_steering_rate: 200.0   # Maximum steering angular velocity [degrees/s]
+    max_steering_angle: 45.0 # Maximum steering angle [degrees]
+    max_steering_rate: 200.0 # Maximum steering angular velocity [degrees/s]
 
     # Topics
     input_topic: /teleop/raw_cmd
