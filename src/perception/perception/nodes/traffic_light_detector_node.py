@@ -47,9 +47,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-from sensor_msgs.msg import Image
 from std_msgs.msg import String
-from cv_bridge import CvBridge
 from ament_index_python.packages import get_package_share_directory
 
 
@@ -82,21 +80,9 @@ class TrafficLightDetectorNode(Node):
         if not self.cap.isOpened():
             self.get_logger().error("Cannot open camera hardware (VideoCapture 0)")
         
-        # -- CvBridge --------------------------------------------------
-        self.bridge = CvBridge()
-
         # -- Publishers ------------------------------------------------
         self.state_pub = self.create_publisher(
             String, '/traffic_light/state', 10
-        )
-
-        debug_qos = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=1
-        )
-        self.debug_pub = self.create_publisher(
-            Image, '/traffic_light/debug_image', debug_qos
         )
 
         # -- Processing timer (decoupled from camera FPS) --------------
@@ -175,6 +161,7 @@ class TrafficLightDetectorNode(Node):
 
         # Stream
         _d('processing_rate', 20.0)
+        _d('show_debug_display', True)
 
     def _load_yaml_params(self) -> dict:
         """Load parameter values from the installed YAML config file.
@@ -259,20 +246,12 @@ class TrafficLightDetectorNode(Node):
         self.state_pub.publish(state_msg)
 
         # -- 7. Debug image --------------------------------------------
-        debug_img = self._draw_debug(
-            frame, roi_offset, circles, cluster_info, confirmed_state
-        )
-        
-        # Display locally via OpenCV
-        cv2.imshow("Traffic Light Detector Debug", debug_img)
-        cv2.waitKey(1)
-        
-        try:
-            self.debug_pub.publish(
-                self.bridge.cv2_to_imgmsg(debug_img, encoding='bgr8')
+        if self._p('show_debug_display'):
+            debug_img = self._draw_debug(
+                frame, roi_offset, circles, cluster_info, confirmed_state
             )
-        except Exception as e:
-            self.get_logger().error(f'Debug image publish failed: {e}')
+            cv2.imshow("Traffic Light Detector Debug", debug_img)
+            cv2.waitKey(1)
 
         # -- Performance log -------------------------------------------
         elapsed_ms = (time.time() - t_start) * 1000.0
