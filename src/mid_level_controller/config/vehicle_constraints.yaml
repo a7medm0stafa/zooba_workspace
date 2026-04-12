@@ -9,12 +9,12 @@ nonholonomic_constraints_node:
     wheel_radius: 0.033 # Wheel radius [m]
 
     # Velocity constraints
-    max_velocity: 3.0 # Maximum forward/reverse speed [m/s]
+    max_velocity: 0.6 # Maximum forward/reverse speed [m/s]
     max_velocity_rate: 1.0 # Maximum acceleration [m/s²]
 
     # Steering constraints
     max_steering_angle: 45.0 # Maximum steering angle [degrees]
-    max_steering_rate: 45.0 # Maximum steering angular velocity [degrees/s]
+    max_steering_rate: 300.0 # Maximum steering angular velocity [degrees/s]
 
     # Topics
     input_topic: /teleop/raw_cmd

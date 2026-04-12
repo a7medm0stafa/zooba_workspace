@@ -26,7 +26,7 @@ def generate_launch_description():
         description='Serial baud rate'
     )
     max_velocity_arg = DeclareLaunchArgument(
-        'max_velocity', default_value='3.0',
+        'max_velocity', default_value='0.6',
         description='Maximum velocity in m/s'
     )
     wheel_radius_arg = DeclareLaunchArgument(
