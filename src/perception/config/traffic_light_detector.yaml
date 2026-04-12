@@ -1,0 +1,44 @@
+traffic_light_detector_node:
+  ros__parameters:
+
+    # ── Circle Detection (HoughCircles) ──────────────────────────
+    dp: 1.2                    # Inverse accumulator resolution ratio
+    min_dist: 10.0             # Min distance between circle centers (px)
+    param1: 100.0              # Canny upper threshold
+    param2: 25.0               # Accumulator threshold
+    min_radius: 5             # Min circle radius (px)
+    max_radius: 25             # Max circle radius (px)
+
+    # ── ROI ──────────────────────────────────────────────────────
+    roi_height_ratio: 0.8      # Fraction of image height from top
+
+    # ── Filtering ────────────────────────────────────────────────
+    min_brightness: 30         # Weak brightness floor (rejects very dark noise only)
+
+    # ── Color Thresholds (HSV) ───────────────────────────────────
+    # Red range 1 (low hue)
+    red_lower1: [0, 100, 80]
+    red_upper1: [10, 255, 255]
+    # Red range 2 (high hue wrap-around)
+    red_lower2: [160, 100, 80]
+    red_upper2: [179, 255, 255]
+    # Yellow
+    yellow_lower: [15, 100, 80]
+    yellow_upper: [35, 255, 255]
+    # Green
+    green_lower: [35, 80, 80]
+    green_upper: [90, 255, 255]
+
+    # ── Clustering ───────────────────────────────────────────────
+    max_circle_distance: 100.0  # Max center-to-center distance to cluster (px)
+    radius_tolerance: 0.5      # Max relative radius difference (ratio)
+
+    # ── Temporal Filtering ───────────────────────────────────────
+    min_confirm_frames: 10      # Consecutive frames needed to confirm a state
+
+    # ── Tracking ─────────────────────────────────────────────────
+    tracking_expansion: 1.5    # Multiplier to expand tracked bbox as search window
+    tracking_lost_frames: 5    # Consecutive failed frames before reverting to DETECTION
+
+    # ── Stream ───────────────────────────────────────────────────
+    processing_rate: 20.0      # Pipeline processing rate (Hz)
