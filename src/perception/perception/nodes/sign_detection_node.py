@@ -368,31 +368,7 @@ class SignDetectionNode(Node):
 
     def _show_debug(self, frame, detections, command, conf):
         """Show OpenCV windows for debugging (desktop only)."""
-        COLORS = {
-            'STOP':       (0,   0,   255),
-            'SLOW_DOWN':  (0,   200, 255),
-            'TURN_LEFT':  (255, 150, 0),
-            'TURN_RIGHT': (255, 100, 0),
-            'NO_SIGN':    (100, 100, 100),
-        }
-
-        display = cv2.resize(frame, (640, 480)).copy()
-
-        for sign, c, (x, y, w, h) in detections:
-            col = COLORS.get(sign, (255, 255, 255))
-            cv2.rectangle(display, (x, y), (x+w, y+h), col, 2)
-            lbl = f'{sign} {c:.0%}'
-            cv2.putText(display, lbl, (x+2, y-6),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, col, 2)
-
-        col = COLORS.get(command, (100, 100, 100))
-        cv2.rectangle(display, (0, 0), (640, 48), (25, 25, 25), -1)
-        cv2.putText(display, f'CMD: {command}', (10, 34),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, col, 2)
-        cv2.putText(display, f'{self.fps:.0f} FPS', (560, 470),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
-
-        cv2.imshow('Sign Detection (ROS2)', display)
+        cv2.imshow('Live Camera (ROS2)', frame)
         cv2.waitKey(1)
 
     # ==================== Cleanup ====================
