@@ -41,7 +41,5 @@ traffic_light_detector_node:
     tracking_lost_frames: 5    # Consecutive failed frames before reverting to DETECTION
 
     # ── Stream ───────────────────────────────────────────────────
-    processing_rate: 8.0      # Pipeline processing rate in Hz (Lowered to save Pi CPU)
-    show_debug_display: true   # Whether to show the OpenCV debug windows locally
-    processing_rate: 10.0      # Pipeline processing rate (Hz)
+    processing_rate: 10.0      # Pipeline processing rate in Hz
     show_debug_display: true   # Whether to show the OpenCV debug windows locally

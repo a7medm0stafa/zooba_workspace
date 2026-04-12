@@ -76,7 +76,7 @@ class TrafficLightDetectorNode(Node):
         self.cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        
+        self.cap.set(cv2.CAP_PROP_FPS, 10) # Drop hardware FPS to prevent queue backlog
         
         if not self.cap.isOpened():
             self.get_logger().error("Cannot open camera hardware (VideoCapture 0)")
@@ -492,6 +492,11 @@ class TrafficLightDetectorNode(Node):
             return []
 
         circles = np.round(detected[0]).astype(int)
+        
+        # MASSIVE CPU SAVER: Limit to top 50 strongest circles to prevent pipeline explosion
+        if len(circles) > 50:
+            circles = circles[:50]
+            
         return [(int(c[0]), int(c[1]), int(c[2])) for c in circles]
 
     # ===================================================================
@@ -532,10 +537,17 @@ class TrafficLightDetectorNode(Node):
             if x < 0 or y < 0 or x >= w or y >= h:
                 continue
 
-            # Weak brightness filter (circular mask)
-            mask = np.zeros((h, w), dtype=np.uint8)
-            cv2.circle(mask, (x, y), r, 255, -1)
-            mean_val = cv2.mean(gray, mask=mask)[0]
+            # Weak brightness filter: Use a tiny bounding box crop instead of full 640x480 mask
+            x1 = max(x - r, 0)
+            y1 = max(y - r, 0)
+            x2 = min(x + r, w)
+            y2 = min(y + r, h)
+            
+            if x1 >= x2 or y1 >= y2:
+                continue
+                
+            roi = gray[y1:y2, x1:x2]
+            mean_val = np.mean(roi)
             if mean_val < min_bright:
                 continue
 
