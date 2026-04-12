@@ -13,7 +13,7 @@ nonholonomic_constraints_node:
     max_velocity_rate: 1.0     # Maximum acceleration [m/s²]
 
     # Steering constraints
-    max_steering_angle: 35.0   # Maximum steering angle [degrees]
+    max_steering_angle: 45.0   # Maximum steering angle [degrees]
     max_steering_rate: 45.0    # Maximum steering angular velocity [degrees/s]
 
     # Topics
