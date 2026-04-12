@@ -493,9 +493,9 @@ class TrafficLightDetectorNode(Node):
 
         circles = np.round(detected[0]).astype(int)
         
-        # MASSIVE CPU SAVER: Limit to top 50 strongest circles to prevent pipeline explosion
-        if len(circles) > 50:
-            circles = circles[:50]
+        # MASSIVE CPU SAVER: Limit to top 15 strongest circles to prevent pipeline explosion
+        if len(circles) > 15:
+            circles = circles[:15]
             
         return [(int(c[0]), int(c[1]), int(c[2])) for c in circles]
 
