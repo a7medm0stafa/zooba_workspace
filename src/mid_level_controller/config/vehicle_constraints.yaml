@@ -9,7 +9,7 @@ nonholonomic_constraints_node:
     wheel_radius: 0.04 # Wheel radius [m]
 
     # Velocity constraints
-    max_velocity: 6.0 # Maximum forward/reverse speed [m/s]
+    max_velocity: 10.0 # Maximum forward/reverse speed [m/s]
     max_velocity_rate: 10.0 # Maximum acceleration [m/s²]
 
     # Steering constraints
