@@ -132,6 +132,14 @@ class SignDetector:
             area = cv2.contourArea(cnt)
             if area < self.min_area or area > self.max_area:
                 continue
+                
+            peri = cv2.arcLength(cnt, True)
+            if peri == 0:
+                continue
+            circ = 4 * np.pi * area / (peri * peri)
+            if circ < 0.75:  # STRICTLY must be circular
+                continue
+                
             x, y, w, h = cv2.boundingRect(cnt)
             ar = w / h if h else 0
             if not (0.5 < ar < 2.0):
@@ -156,16 +164,69 @@ class SignDetector:
         white = cv2.morphologyEx(white, cv2.MORPH_CLOSE, kern)
 
         h, w = white.shape
-        left_pixels = cv2.countNonZero(white[:, :w//2])
-        right_pixels = cv2.countNonZero(white[:, w//2:])
-        total = left_pixels + right_pixels
+        
+        # Sanity check: must actually have a white arrow!
+        # Reject if there is almost no white (e.g. solid blue object) or too much white (glare)
+        n_white = cv2.countNonZero(white)
+        total_pixels = h * w
+        if n_white < total_pixels * 0.05 or n_white > total_pixels * 0.85:
+            return None
+            
+        # ---- Method 1: convex-hull tip sharpness --------
+        contours, _ = cv2.findContours(white, cv2.RETR_EXTERNAL,
+                                       cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+
+        biggest = max(contours, key=cv2.contourArea)
+        hull_pts = cv2.convexHull(biggest).squeeze()
+        
+        if hull_pts.ndim == 2 and len(hull_pts) >= 4:
+            # Find leftmost & rightmost hull vertices
+            li = int(np.argmin(hull_pts[:, 0]))
+            ri = int(np.argmax(hull_pts[:, 0]))
+            n  = len(hull_pts)
+
+            left_angle  = self._hull_angle(hull_pts, li, n)
+            right_angle = self._hull_angle(hull_pts, ri, n)
+
+            # Sharper angle (smaller value) = arrowhead tip
+            diff = right_angle - left_angle
+            if abs(diff) > 10:                       # 10° minimum margin
+                return 'LEFT' if left_angle < right_angle else 'RIGHT'
+
+        # ---- Method 2: mass distribution fallback -------
+        return self._arrow_by_mass(white)
+
+    @staticmethod
+    def _hull_angle(pts, idx, n):
+        """Interior angle at pts[idx] on the convex hull."""
+        p = pts[(idx - 1) % n].astype(float)
+        q = pts[idx].astype(float)
+        r = pts[(idx + 1) % n].astype(float)
+        v1 = p - q
+        v2 = r - q
+        cos_a = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-6)
+        return np.degrees(np.arccos(np.clip(cos_a, -1, 1)))
+
+    @staticmethod
+    def _arrow_by_mass(white_mask):
+        """Fallback: compare white-pixel mass in left vs right half."""
+        h, w = white_mask.shape
+        left_mass  = np.sum(white_mask[:, :w//2].astype(float))
+        right_mass = np.sum(white_mask[:, w//2:].astype(float))
+        total = left_mass + right_mass
+        
         if total == 0:
             return None
-        ratio = (left_pixels - right_pixels) / total
-        if ratio > 0.05:
+            
+        ratio = (left_mass - right_mass) / total
+        
+        if ratio > 0.15:
             return 'LEFT'
-        elif ratio < -0.05:
+        elif ratio < -0.15:
             return 'RIGHT'
+            
         return None
 
     # ── shared helpers ───────────────────────────────────
@@ -368,7 +429,31 @@ class SignDetectionNode(Node):
 
     def _show_debug(self, frame, detections, command, conf):
         """Show OpenCV windows for debugging (desktop only)."""
-        cv2.imshow('Live Camera (ROS2)', frame)
+        COLORS = {
+            'STOP':       (0,   0,   255),
+            'SLOW_DOWN':  (0,   200, 255),
+            'TURN_LEFT':  (255, 150, 0),
+            'TURN_RIGHT': (255, 100, 0),
+            'NO_SIGN':    (100, 100, 100),
+        }
+
+        display = cv2.resize(frame, (640, 480)).copy()
+
+        for sign, c, (x, y, w, h) in detections:
+            col = COLORS.get(sign, (255, 255, 255))
+            cv2.rectangle(display, (x, y), (x+w, y+h), col, 2)
+            lbl = f'{sign} {c:.0%}'
+            cv2.putText(display, lbl, (x+2, y-6),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, col, 2)
+
+        col = COLORS.get(command, (100, 100, 100))
+        cv2.rectangle(display, (0, 0), (640, 48), (25, 25, 25), -1)
+        cv2.putText(display, f'CMD: {command}', (10, 34),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, col, 2)
+        cv2.putText(display, f'{self.fps:.0f} FPS', (560, 470),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
+
+        cv2.imshow('Sign Detection (ROS2)', display)
         cv2.waitKey(1)
 
     # ==================== Cleanup ====================
