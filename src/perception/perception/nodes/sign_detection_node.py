@@ -125,7 +125,6 @@ class SignDetectionNode(Node):
 
     # ── preprocessing ────────────────────────────────────
     def preprocess(self, frame):
-        frame=cv2.flip(frame, 1)
         img = cv2.resize(frame, (640, 480))
 
         # Brightness boost via V channel
@@ -310,8 +309,8 @@ class SignDetectionNode(Node):
         if not ok:
             return
         
-        # If needed, flip frame horizontally (as in the standalone script)
-        frame = cv2.flip(frame, 1)
+        # Rotate 180 degrees (-1) or remove completely if no flip is needed
+        frame = cv2.flip(frame, -1)
         
         proc_start = time.time()
         detections, processed, hsv = self.detect(frame)
