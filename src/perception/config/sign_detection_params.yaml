@@ -1,0 +1,8 @@
+sign_detection_node:
+  ros__parameters:
+    min_area: 1500
+    max_area: 120000
+    epsilon_factor: 0.02
+    vote_window: 15
+    vote_threshold: 11
+    show_gui: False
