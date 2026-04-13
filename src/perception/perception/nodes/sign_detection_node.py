@@ -56,13 +56,9 @@ class SignDetector:
         img_bgr = img[0:y_end, :]
 
         t_resize = time.perf_counter()
-        timings['Resize/Bright'] = t_resize - t_start
+        timings['Resize/Crop'] = t_resize - t_start
 
-        hsv_raw = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
-        h, s, v = cv2.split(hsv_raw)
-        # Increase V channel boost further (up to 60) for robust color detection in darkness
-        v = np.clip(cv2.add(v, 60), 0, 255).astype(np.uint8)
-        hsv = cv2.merge((h, s, v))
+        hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
 
         t_hsv = time.perf_counter()
         timings['HSV'] = t_hsv - t_resize
