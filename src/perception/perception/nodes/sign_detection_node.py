@@ -11,9 +11,10 @@ from collections import deque
 # ═══════════════════════════════════════════════════════════
 
 RED_RANGES = [
-    (np.array([0,   120, 70]),  np.array([10,  255, 255])),
-    (np.array([170, 120, 70]),  np.array([179, 255, 255])),
+    (np.array([0,   150, 120]),  np.array([8,   255, 255])),
+    (np.array([172, 150, 120]),  np.array([179, 255, 255]))
 ]
+
 YELLOW_RANGE = (
     np.array([20, 120, 120]),
     np.array([30, 255, 255])
@@ -146,15 +147,31 @@ class SignDetectionNode(Node):
 
     # ── main pipeline ────────────────────────────────────
     def detect(self, frame):
-        """Returns (detections_list, processed_frame, hsv_frame)."""
+        """Returns (detections_list, processed_frame, hsv_frame, debug_masks)."""
         processed = self.preprocess(frame)
         hsv = cv2.cvtColor(processed, cv2.COLOR_BGR2HSV)
 
+        # --- CREATE MASKS FOR DEBUG ---
+        red_mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
+        for lo, hi in RED_RANGES:
+            red_mask = cv2.bitwise_or(red_mask, cv2.inRange(hsv, lo, hi))
+
+        yellow_mask = cv2.inRange(hsv, *YELLOW_RANGE)
+        blue_mask   = cv2.inRange(hsv, self.lower_blue, self.upper_blue)
+
+        debug_masks = {
+            "red": self._clean_mask(red_mask),
+            "yellow": self._clean_mask(yellow_mask),
+            "blue": self._clean_mask(blue_mask)
+        }
+
+        # --- ORIGINAL DETECTION (UNCHANGED) ---
         detections = []
         detections += self._find_red(hsv)
         detections += self._find_yellow(hsv)
         detections += self._find_blue(hsv, processed)
-        return detections, processed, hsv
+
+        return detections, processed, hsv, debug_masks
 
     # ── red  →  STOP ─────────────────────────────────────
     def _find_red(self, hsv):
@@ -313,7 +330,7 @@ class SignDetectionNode(Node):
         frame = cv2.flip(frame, -1)
         
         proc_start = time.time()
-        detections, processed, hsv = self.detect(frame)
+        detections, processed, hsv, debug_masks = self.detect(frame)
         command, conf = self.vote(detections)
         proc_ms = (time.time() - proc_start) * 1000 
 
@@ -341,9 +358,35 @@ class SignDetectionNode(Node):
         # GUI Display
         if self.show_gui:
             display = draw_gui(cv2.resize(frame, (640, 480)), detections, command, conf, self.fps)
-            cv2.putText(display, f"{proc_ms:.1f} ms", (10, 450), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-            cv2.imshow('Sign Detection', display)
+
+            # Convert masks to 3-channel for stacking
+            red_vis    = cv2.cvtColor(debug_masks["red"], cv2.COLOR_GRAY2BGR)
+            yellow_vis = cv2.cvtColor(debug_masks["yellow"], cv2.COLOR_GRAY2BGR)
+            blue_vis   = cv2.cvtColor(debug_masks["blue"], cv2.COLOR_GRAY2BGR)
+
+            # Resize masks to match display height
+            red_vis    = cv2.resize(red_vis, (213, 160))
+            yellow_vis = cv2.resize(yellow_vis, (213, 160))
+            blue_vis   = cv2.resize(blue_vis, (213, 160))
+
+            # Stack masks horizontally
+            masks_row = np.hstack((red_vis, yellow_vis, blue_vis))
+
+            # Resize main display
+            display_small = cv2.resize(display, (640, 320))
+
+            # Stack vertically: main + masks
+            combined = np.vstack((display_small, masks_row))
+
+            # Labels
+            cv2.putText(combined, "RED", (10, 340),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 1)
+            cv2.putText(combined, "YELLOW", (230, 340),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,255), 1)
+            cv2.putText(combined, "BLUE", (460, 340),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 1)
+
+            cv2.imshow('Sign Detection Debug', combined)
             cv2.waitKey(1)
 
 def main(args=None):
