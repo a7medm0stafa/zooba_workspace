@@ -1,40 +1,69 @@
+# ============================================================================
+# Sign Detection Node Parameters (GTSRB TFLite version)
+# ============================================================================
+# This node uses a fine-tuned 5-class GTSRB model to detect signs and
+# publishes VehicleCmd to the mid-level controller pipeline.
+# ============================================================================
+
 perception:
   sign_detection_node:
     ros__parameters:
-      # Velocity / Movement mappings
-      cruise_velocity: 0.5
-      slow_velocity: 0.3
-      turn_heading: 20.0
 
-      # Camera
+      # ── TFLite Model ──────────────────────────────────────────────────────
+      # Leave empty to auto-detect from perception/model/ folder
+      model_path: ""
+      crop_size: 64
+      num_threads: 2
+      confidence_threshold: 0.75
+
+      # ── Camera ────────────────────────────────────────────────────────────
       camera_index: 0
-      flip_horizontal: true
+      frame_width: 320
+      frame_height: 240
+      flip_camera: true
       publish_rate: 20.0
+
+      # ── Display ───────────────────────────────────────────────────────────
       show_gui: false
-      
-      # Topics
-      output_topic: "/vehicle/cmd"
+
+      # ── Temporal Smoother ─────────────────────────────────────────────────
+      # confirm_frames: how many consecutive frames a sign must appear
+      # clear_frames:   how many consecutive NO_SIGN frames to clear
+      confirm_frames: 3
+      clear_frames: 6
+
+      # ── Topics (pub/sub) ──────────────────────────────────────────────────
+      # cmd_output_topic → feeds into nonholonomic_constraints_node
+      cmd_output_topic: "/teleop/raw_cmd"
       sign_topic: "/perception/sign_detected"
 
-      # Core Pipeline Paramters
-      crop_top_percentage: 0.60
-      min_area: 1000
-      max_area: 120000
-      min_purity: 0.50
+      # ── Velocity / Heading Mappings ───────────────────────────────────────
+      cruise_velocity: 0.5       # m/s — default speed when no sign detected
+      slow_velocity: 0.3         # m/s — speed when SLOW_DOWN sign
+      stop_velocity: 0.0         # m/s — speed when STOP sign
+      turn_velocity: 0.35        # m/s — speed during turns
+      turn_heading: 20.0         # degrees — steering angle for turns
+      stop_duration: 3.0         # seconds — how long to stop at STOP sign
 
-      # Geometry Checks (Circularity thresholds)
-      stop_min_circularity: 0.75
-      slow_min_circularity: 0.40
-      turn_min_circularity: 0.75
-
-      # HSV Ranges [H, S, V] arrays
-      red_range1_low:  [0, 50, 50]
-      red_range1_high: [15, 255, 255]
-      red_range2_low:  [160, 50, 50]
+      # ── HSV Color Ranges ──────────────────────────────────────────────────
+      # Red (2 ranges to handle hue wrap-around)
+      red_range1_low:  [0, 120, 120]
+      red_range1_high: [10, 255, 255]
+      red_range2_low:  [170, 120, 120]
       red_range2_high: [179, 255, 255]
 
-      yellow_range_low: [18, 90, 90]
+      # Yellow
+      yellow_range_low:  [18, 100, 100]
       yellow_range_high: [38, 255, 255]
 
-      blue_range_low: [100, 130, 60]
+      # Blue
+      blue_range_low:  [100, 100, 80]
       blue_range_high: [130, 255, 255]
+
+      # ── ROI Filter Geometry ───────────────────────────────────────────────
+      min_area: 1500
+      max_area: 150000
+      ignore_bottom_percent: 0.40    # Discard bottom 40% of frame (floor)
+      min_aspect_ratio: 0.65
+      max_aspect_ratio: 1.45
+      min_solidity: 0.73

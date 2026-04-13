@@ -1,387 +1,349 @@
+"""
+test_gtsrb_live.py
+==================
+Run this on the Raspberry Pi BEFORE integrating into the robot.
+
+Shows a live camera feed with:
+  - Raw GTSRB class prediction (all 43 classes)
+  - Mapped label (STOP / SLOW_DOWN / TURN_LEFT / TURN_RIGHT / NO_SIGN)
+  - Confidence score
+  - Color ROI bounding box
+
+This lets you hold each sign in front of the camera and verify:
+  ✓ Does the ROI filter find the sign?
+  ✓ Does the classifier label it correctly?
+  ✓ Is confidence consistently above 0.85?
+
+If any sign fails → move to fine-tuning (only 30 images needed at that point)
+
+Usage:
+  python3 test_gtsrb_live.py
+  python3 test_gtsrb_live.py --model /path/to/model.tflite
+  python3 test_gtsrb_live.py --no-roi   (skip color filter, classify full frame crop)
+
+Press Q to quit.
+Press S to save a snapshot of the current frame (useful for collecting failures).
+"""
+
 import cv2
 import numpy as np
+import argparse
 import time
+import os
 
-FRAME_W, FRAME_H = 640, 480
+try:
+    import tflite_runtime.interpreter as tflite
+except ImportError:
+    import tensorflow.lite as tflite
 
-RED_RANGES = [
-    (np.array([0,   120, 70]),  np.array([10,  255, 255])),
-    (np.array([170, 120, 70]),  np.array([179, 255, 255])),
-]
-YELLOW_RANGE = (
-    np.array([18, 90, 90]),
-    np.array([38, 255, 255])
-)# Increased Min Saturation to 130 so white arrows aren't accidentally captured as blue
-BLUE_RANGE   = (np.array([100, 130, 60]), np.array([130, 255, 255]))
-
-class SignDetector:
-    def __init__(self):
-        self.min_area = 1200
-        self.max_area = 120_000
-        self.epsilon_factor = 0.02
-        
-        # Purity check: object must significantly fill its bounding box in the color mask
-        self.min_purity = 0.50
-
-        # Geometric Strictness
-        self.stop_min_circularity  = 0.75  # Octagon is ~0.94
-        self.slow_min_circularity  = 0.52  # Triangle is ~0.60
-        self.turn_min_circularity  = 0.75  # Circle is ~1.0
-
-    def detect(self, original_frame, show_dbg=False):
-        """
-        Architecture Pipeline
-        """
-        # --- Pre-processing & Crop Optimization ---
-        img = cv2.resize(original_frame, (FRAME_W, FRAME_H))
-        y_end = int(FRAME_H * 0.6)  # Decreased top crop to keep only 40%
-        img_bgr = img[0:y_end, :]
-
-        # Light native brightness boost for HSV
-        hsv_raw = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
-        h, s, v = cv2.split(hsv_raw)
-        v = np.clip(cv2.add(v, 20), 0, 255).astype(np.uint8)
-        hsv = cv2.merge((h, s, v))
-
-        # Output Containers
-        detections = []
-        if show_dbg:
-            debug_shapes = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-            # Convert back to BGR so we can draw colored contours on it
-            debug_shapes = cv2.cvtColor(debug_shapes, cv2.COLOR_GRAY2BGR)
-            debug_edges = np.zeros_like(img_bgr)
-        else:
-            debug_shapes = None
-            debug_edges = None
-
-        # ------------------------------------------------------------------
-        # PIECE 1: Red Signs (STOP)
-        # ------------------------------------------------------------------
-        # Step 1: HSV mask (color)
-        mask_r = np.zeros(hsv.shape[:2], dtype=np.uint8)
-        for lo, hi in RED_RANGES:
-            mask_r = cv2.bitwise_or(mask_r, cv2.inRange(hsv, lo, hi))
-        
-        # Step 2: Morphological cleaning
-        clean_r = self._clean(mask_r)
-        
-        # Step 3, 4, 5, 6
-        det_r = self._process_pipeline('STOP', clean_r, img_bgr, 6, 14, self.stop_min_circularity, debug_shapes, debug_edges, (0, 0, 255))
-        detections.extend(det_r)
-
-        # ------------------------------------------------------------------
-        # PIECE 2: Yellow Signs (SLOW_DOWN)
-        # ------------------------------------------------------------------
-        # Step 1: HSV mask (color)
-        mask_y = cv2.inRange(hsv, *YELLOW_RANGE)
-        
-        # Step 2: Morphological cleaning
-        clean_y = self._clean(mask_y)
-        
-        # Step 3, 4, 5, 6
-        det_y = self._process_pipeline('SLOW_DOWN', clean_y, img_bgr, 3, 6, self.slow_min_circularity, debug_shapes, debug_edges, (0, 255, 255))
-        detections.extend(det_y)
-
-        # ------------------------------------------------------------------
-        # PIECE 3: Blue Signs (TURN_LEFT / RIGHT)
-        # ------------------------------------------------------------------
-        # Step 1 & 2
-        mask_b = cv2.inRange(hsv, *BLUE_RANGE)
-        clean_b = self._clean(mask_b)
-        
-        # Step 3, 4, 5, 6
-        det_b = self._process_blue_pipeline(clean_b, img_bgr, debug_shapes, debug_edges)
-        detections.extend(det_b)
-
-        # ------------------------------------------------------------------
-        
-        clean_masks = (clean_r, clean_y, clean_b) if show_dbg else None
-
-        best_cmd = 'NO_SIGN'
-        best_conf = 0.0
-        best_bbox = (0, 0, 0, 0)
-        
-        if detections:
-            best_det = max(detections, key=lambda d: d[1])
-            best_cmd, best_conf, best_bbox = best_det
-
-        return best_cmd, best_conf, best_bbox, img_bgr, clean_masks, debug_shapes, debug_edges
-
-    # =====================================================================
-    #  Core Pipeline Logic Implementation
-    # =====================================================================
-
-    def _clean(self, mask):
-        """Step 2: Morphological cleaning"""
-        k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-        return cv2.morphologyEx(cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k), cv2.MORPH_OPEN, k)
-
-    def _process_pipeline(self, label, clean_mask, img_bgr, min_v, max_v, min_circ, debug_shapes, debug_edges, color):
-        dets = []
-        # Step 3: Find contours
-        contours, _ = cv2.findContours(clean_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        for cnt in contours:
-            # Step 4: Filter (area, aspect ratio, purity)
-            area = cv2.contourArea(cnt)
-            if area < self.min_area or area > self.max_area: 
-                continue
-                
-            x, y, w, h = cv2.boundingRect(cnt)
-            
-            # Aspect Ratio Filter (Signs are roughly square)
-            ar = w / float(h) if h > 0 else 0
-            if not (0.5 < ar < 2.0): 
-                continue
-                
-            # Color Purity Filter: Check % of True pixels in tight bounding box
-            roi_mask = clean_mask[y:y+h, x:x+w]
-            purity = cv2.countNonZero(roi_mask) / float(w * h)
-            if purity < self.min_purity: 
-                continue
-
-            if debug_shapes is not None:
-                # Draw the ROI boundary directly
-                cv2.rectangle(debug_shapes, (x, y), (x+w, y+h), (50, 200, 50), 1)
-
-            # Step 5: Extract ROI from the original BGR image with slight padding
-            pad = 10
-            y1, y2 = max(0, y-pad), min(img_bgr.shape[0], y+h+pad)
-            x1, x2 = max(0, x-pad), min(img_bgr.shape[1], x+w+pad)
-            roi_bgr = img_bgr[y1:y2, x1:x2]
-
-            # Step 6: Inside ROI: grayscale + edges, shape detection
-            passed, circ, verts = self._roi_shape_detection(roi_bgr, min_v, max_v, min_circ, debug_shapes, debug_edges, x1, y1, color)
-            
-            if passed:
-                conf = min(1.0, circ + 0.2 * (area / self.max_area))
-                dets.append((label, round(conf, 2), (x, y, w, h)))
-                
-        return dets
-
-    def _process_blue_pipeline(self, clean_mask, img_bgr, debug_shapes, debug_edges):
-        """Specifically handles Blue Turn arrows which require arrow-mass calculation inside the ROI"""
-        dets = []
-        # Step 3
-        contours, _ = cv2.findContours(clean_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        for cnt in contours:
-            # Step 4: Cheap global filters
-            area = cv2.contourArea(cnt)
-            if area < self.min_area or area > self.max_area: continue
-            
-            x, y, w, h = cv2.boundingRect(cnt)
-            if not (0.6 < w / float(h) < 1.6): continue
-            
-            roi_mask = clean_mask[y:y+h, x:x+w]
-            purity = cv2.countNonZero(roi_mask) / float(w * h)
-            if purity < self.min_purity: continue
-
-            if debug_shapes is not None:
-                # Draw the ROI boundary directly
-                cv2.rectangle(debug_shapes, (x, y), (x+w, y+h), (50, 200, 50), 1)
-
-            # Step 5: Extract ROI with slight padding
-            pad = 10
-            y1, y2 = max(0, y-pad), min(img_bgr.shape[0], y+h+pad)
-            x1, x2 = max(0, x-pad), min(img_bgr.shape[1], x+w+pad)
-            roi_bgr = img_bgr[y1:y2, x1:x2]
-            
-            # Step 6: Grayscale geometry & arrow logic
-            passed, circ, verts = self._roi_shape_detection(roi_bgr, 6, 20, self.turn_min_circularity, debug_shapes, debug_edges, x1, y1, (255, 100, 0))
-            if passed:
-                direction = self._arrow_direction(roi_bgr)
-                if direction:
-                    conf = min(1.0, circ + 0.1)
-                    dets.append((f'TURN_{direction}', round(conf, 2), (x, y, w, h)))
-        return dets
-
-    def _roi_shape_detection(self, roi_bgr, min_v, max_v, min_circ, debug_shapes, debug_edges, offset_x, offset_y, color):
-        """
-        Step 6 Logic: Heavy mathematics explicitly restricted to tiny ROIs.
-        Converts the tight ROI to Grayscale, applies Canny Edge Detection to secure the structural contour precisely, and checks geometry.
-        """
-        if roi_bgr.shape[0] < 10 or roi_bgr.shape[1] < 10: 
-            return False, 0.0, 0
-            
-        roi_gray = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2GRAY)
-        roi_gray = cv2.GaussianBlur(roi_gray, (3, 3), 0)
-        
-        # Use Canny instead of Otsu threshold to securely define the outer boundary curve without being broken by inner white arrow symbols
-        edge_map = cv2.Canny(roi_gray, 50, 150)
-        edge_map = cv2.dilate(edge_map, None, iterations=1)
-        
-        contours, _ = cv2.findContours(edge_map, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        if debug_edges is not None:
-            edge_bgr = cv2.cvtColor(edge_map, cv2.COLOR_GRAY2BGR)
-            h, w = edge_bgr.shape[:2]
-            if offset_y+h <= debug_edges.shape[0] and offset_x+w <= debug_edges.shape[1]:
-                debug_edges[offset_y:offset_y+h, offset_x:offset_x+w] = cv2.bitwise_or(
-                    debug_edges[offset_y:offset_y+h, offset_x:offset_x+w], 
-                    edge_bgr
-                )
-        
-        if not contours: 
-            return False, 0.0, 0
-
-        # Grab the largest geometric entity inside the ROI
-        cnt = max(contours, key=cv2.contourArea)
-        
-        area = cv2.contourArea(cnt)
-        peri = cv2.arcLength(cnt, True)
-        if peri == 0: 
-            return False, 0.0, 0
-            
-        circ = 4 * np.pi * area / (peri * peri)
-        approx = cv2.approxPolyDP(cnt, self.epsilon_factor * peri, True)
-        verts = len(approx)
-
-        passed = (min_v <= verts <= max_v) and (circ >= min_circ)
-
-        if debug_shapes is not None:
-            # Shift the local coordinates back to global canvas space for the debug view
-            approx_global = approx + np.array([offset_x, offset_y])
-            cnt_global = cnt + np.array([offset_x, offset_y])
-            
-            # Draw the tight raw ROI contour outline
-            cv2.drawContours(debug_shapes, [cnt_global], -1, (80, 80, 80), 1)
-            
-            if passed:
-                cv2.drawContours(debug_shapes, [approx_global], -1, color, 2)
-                for pt in approx_global.squeeze():
-                    cv2.circle(debug_shapes, tuple(pt), 4, (255,255,255), -1)
-                
-            text_color = color if passed else (100, 100, 100)
-            cv2.putText(debug_shapes, f'v={verts} c={circ:.2f}', (offset_x, offset_y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, text_color, 1)
-
-        return passed, circ, verts
-
-    # ---------------------------------------------------------------------
-    # Arrow Processing Logic inside the Blue ROI
-    # ---------------------------------------------------------------------
-
-    def _arrow_direction(self, roi):
-        hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-        b_mask = cv2.inRange(hsv_roi, *BLUE_RANGE)
-        
-        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        # Use Otsu to dynamically figure out exactly how bright the arrow is compared to the rest of the dark sign
-        _, bright = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        
-        am = cv2.bitwise_and(bright, cv2.bitwise_not(b_mask))
-        
-        k = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        am = cv2.morphologyEx(cv2.morphologyEx(am, cv2.MORPH_CLOSE, k), cv2.MORPH_OPEN, k)
-        
-        nw, total = cv2.countNonZero(am), am.shape[0]*am.shape[1]
-        if nw < total * 0.05 or nw > total * 0.80: return None
-        
-        contours, _ = cv2.findContours(am, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours: return None
-        
-        hull = cv2.convexHull(max(contours, key=cv2.contourArea)).squeeze()
-        if hull.ndim != 2 or len(hull) < 5: return self._mass_dir(am)
-        
-        n = len(hull)
-        li, ri = int(np.argmin(hull[:, 0])), int(np.argmax(hull[:, 0]))
-        la, ra = self._angle(hull, li, n), self._angle(hull, ri, n)
-        if abs(ra - la) > 10: return 'LEFT' if la < ra else 'RIGHT'
-        return self._mass_dir(am)
-
-    @staticmethod
-    def _angle(pts, idx, n):
-        p, q, r = pts[(idx-1)%n].astype(float), pts[idx].astype(float), pts[(idx+1)%n].astype(float)
-        v1, v2 = p - q, r - q
-        return np.degrees(np.arccos(np.clip(np.dot(v1, v2) / (np.linalg.norm(v1)*np.linalg.norm(v2)+1e-6), -1, 1)))
-
-    @staticmethod
-    def _mass_dir(m):
-        h, w = m.shape
-        lm, rm = float(np.sum(m[:, :w//2])), float(np.sum(m[:, w//2:]))
-        if lm+rm == 0: return None
-        r = (lm-rm)/(lm+rm)
-        return 'LEFT' if r > 0.15 else ('RIGHT' if r < -0.15 else None)
-
-# =========================================================================
-#  Application Runner Tools
-# =========================================================================
-
-COLORS = {
-    'STOP': (0,0,255), 'SLOW_DOWN': (0,200,255), 
-    'TURN_LEFT': (255,150,0), 'TURN_RIGHT': (255,100,0), 'NO_SIGN': (100,100,100)
+# ─────────────────────────────────────────────────────────────────────────────
+# GTSRB CLASS MAPPING
+# Maps all 43 GTSRB class indices to your 5 robot commands.
+# Anything not listed defaults to NO_SIGN.
+# ─────────────────────────────────────────────────────────────────────────────
+GTSRB_CLASSES = {
+    0: "Speed limit 20",    1: "Speed limit 30",
+    2: "Speed limit 50",    3: "Speed limit 60",
+    4: "Speed limit 70",    5: "Speed limit 80",
+    6: "End speed limit 80",7: "Speed limit 100",
+    8: "Speed limit 120",   9: "No passing",
+    10:"No passing (trucks)",11:"Priority road ahead",
+    12:"Priority road",     13:"Yield",
+    14:"Stop",              15:"No vehicles",
+    16:"No trucks",         17:"No entry",
+    18:"General caution",   19:"Curve left",
+    20:"Curve right",       21:"Double curve",
+    22:"Bumpy road",        23:"Slippery road",
+    24:"Road narrows right",25:"Road work",
+    26:"Traffic signals",   27:"Pedestrians",
+    28:"Children crossing", 29:"Bicycles crossing",
+    30:"Ice/snow",          31:"Wild animals",
+    32:"End restrictions",  33:"Turn right ahead",
+    34:"Turn left ahead",   35:"Go straight",
+    36:"Straight or right", 37:"Straight or left",
+    38:"Keep right",        39:"Keep left",
+    40:"Roundabout",        41:"End no passing",
+    42:"End no passing (trucks)"
 }
 
-def draw(frame_top, cmd, conf, bbox, fps):
-    x, y, w, h = bbox
-    out = frame_top.copy()
-    if cmd != 'NO_SIGN':
-        col = COLORS.get(cmd, (255,255,255))
-        cv2.rectangle(out, (x, y), (x+w, y+h), col, 2)
-        lbl = f'{cmd} {conf:.0%}'
-        cv2.putText(out, lbl, (x, max(15, y-5)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, col, 2)
+# ── YOUR 5-CLASS MAPPING ──────────────────────────────────────────────────────
+# Edit this if your "SLOW DOWN" sign looks more like a specific GTSRB class.
+# For example: if your slow-down sign is a yellow warning triangle, add class 18.
+GTSRB_TO_ROBOT = {
+    # STOP
+    14: "STOP",
 
-    fh = out.shape[0]
-    cv2.rectangle(out, (0, fh-28), (FRAME_W, fh), (25, 25, 25), -1)
-    cv2.putText(out, f'{fps:.0f} FPS | CMD: {cmd}', (8, fh-8), cv2.FONT_HERSHEY_SIMPLEX, 0.55, COLORS.get(cmd, (180,180,180)), 2)
-    return out
+    # TURN RIGHT
+    33: "TURN_RIGHT",
+    36: "TURN_RIGHT",    # straight-or-right (close enough)
+    38: "TURN_RIGHT",    # keep right
 
-def debug_masks(clean_masks):
-    r, y, b = clean_masks
-    row = np.hstack([cv2.cvtColor(m, cv2.COLOR_GRAY2BGR) for m in (r, y, b)])
-    for txt, xp, col in [('1. RED', 10, (0,0,255)), ('2. YELLOW', 650, (0,255,255)), ('3. BLUE', 1290, (255,100,0))]:
-        cv2.putText(row, txt, (xp, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, col, 2)
-    return row
+    # TURN LEFT
+    34: "TURN_LEFT",
+    37: "TURN_LEFT",     # straight-or-left
+    39: "TURN_LEFT",     # keep left
 
-def main():
-    print('====================================')
-    print(' Sign Detection Pipeline Architecture')
-    print(' Q: Quit  |  D: Debug ROI Geometry')
-    print('====================================')
-    
-    cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_W)
+    # SLOW DOWN — speed limit signs + general warning
+    0:  "SLOW_DOWN",     # 20 km/h
+    1:  "SLOW_DOWN",     # 30 km/h
+    2:  "SLOW_DOWN",     # 50 km/h
+    3:  "SLOW_DOWN",     # 60 km/h
+    4:  "SLOW_DOWN",     # 70 km/h
+    5:  "SLOW_DOWN",     # 80 km/h
+    7:  "SLOW_DOWN",     # 100 km/h
+    8:  "SLOW_DOWN",     # 120 km/h
+    18: "SLOW_DOWN",     # General caution triangle
+    25: "SLOW_DOWN",     # Road work
+}
+
+FRAME_W, FRAME_H = 320, 240
+CROP_SIZE        = 64
+CONFIDENCE_THRESHOLD = 0.75    # lower threshold for testing (raise to 0.85 in prod)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COLOR ROI FILTER (same as sign_node.py)
+# ─────────────────────────────────────────────────────────────────────────────
+class ColorROIFilter:
+    # 1. Increased Vibrancy (Saturation and Value 90-100 min)
+    RED = [
+        (np.array([0, 120, 120]), np.array([10, 255, 255])),
+        (np.array([170,120,120]), np.array([179,255,255]))
+    ]
+    YELLOW =  (np.array([18, 100, 100]),  np.array([38, 255, 255]))
+    BLUE   =  (np.array([100,100,80]),  np.array([130,255, 255]))
+    MIN_AREA = 1500
+    MAX_AREA = 150000
+    IGNORE_BOTTOM_PERCENT = 0.40 # Discard bottom 40% of frame
+
+    def find_roi(self, frame):
+        frame = cv2.GaussianBlur(frame, (5,5), 0)
+
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4))
+        h, s, v = cv2.split(hsv)
+        hsv = cv2.merge([h, s, clahe.apply(v)])
+
+        red_mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
+        for lo, hi in self.RED:
+            red_mask |= cv2.inRange(hsv, lo, hi)
+        yellow_mask = cv2.inRange(hsv, *self.YELLOW)
+        blue_mask   = cv2.inRange(hsv, *self.BLUE)
+        
+        # Completely zero out the bottom 40% of the masks to ignore the floor
+        h_mask = red_mask.shape[0]
+        cutoff = int(h_mask * (1.0 - self.IGNORE_BOTTOM_PERCENT))
+        red_mask[cutoff:, :] = 0
+        yellow_mask[cutoff:, :] = 0
+        blue_mask[cutoff:, :] = 0
+
+        best_area, best_crop, best_box = 0, None, None
+
+        for mask in [red_mask, yellow_mask, blue_mask]:
+            k = np.ones((5,5), np.uint8)
+            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k)
+            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN,  k)
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            for c in contours:
+                area = cv2.contourArea(c)
+                if not (self.MIN_AREA < area < self.MAX_AREA):
+                    continue
+                x, y, w, h = cv2.boundingRect(c)
+                if not (0.65 < w/float(h) < 1.45):
+                    continue
+                hull = cv2.convexHull(c)
+                hull_area = cv2.contourArea(hull)
+                if hull_area == 0:
+                    continue
+                if area / hull_area < 0.73:
+                    continue
+                    
+                # Polygon approximation to ensure it's a harsh geometric shape (triangle, rectangle, octagon, circle)
+                epsilon = 0.04 * cv2.arcLength(c, True)
+                approx = cv2.approxPolyDP(c, epsilon, True)
+                if not (3 <= len(approx) <= 12):
+                    continue
+                if area > best_area:
+                    best_area = area
+                    pad = int(max(w, h) * 0.10)
+                    x1 = max(0, x - pad);  y1 = max(0, y - pad)
+                    x2 = min(frame.shape[1], x+w+pad)
+                    y2 = min(frame.shape[0], y+h+pad)
+                    best_crop = frame[y1:y2, x1:x2]
+                    best_box  = (x1, y1, x2-x1, y2-y1)
+
+        return best_crop, best_box, red_mask, yellow_mask, blue_mask
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CLASSIFIER
+# ─────────────────────────────────────────────────────────────────────────────
+class GTSRBClassifier:
+
+    def __init__(self, model_path):
+        self.interpreter = tflite.Interpreter(model_path=model_path, num_threads=2)
+        self.interpreter.allocate_tensors()
+        self.inp = self.interpreter.get_input_details()
+        self.out = self.interpreter.get_output_details()
+        self.is_int8 = self.inp[0]["dtype"] in (np.int8, np.uint8)
+        print(f"Model loaded: {model_path}")
+        print(f"Input shape:  {self.inp[0]['shape']}")
+        print(f"Input dtype:  {self.inp[0]['dtype']}")
+        print(f"INT8 mode:    {self.is_int8}")
+
+    def classify(self, crop):
+        """Returns (gtsrb_class_id, gtsrb_class_name, robot_label, confidence)"""
+        img = cv2.resize(crop, (CROP_SIZE, CROP_SIZE))
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        if self.is_int8:
+            inp = (img.astype(np.float32) - 128).astype(np.int8)
+        else:
+            inp = img.astype(np.float32) / 255.0
+
+        self.interpreter.set_tensor(self.inp[0]["index"], np.expand_dims(inp, 0))
+        self.interpreter.invoke()
+
+        output = self.interpreter.get_tensor(self.out[0]["index"])[0].astype(np.float32)
+
+        if self.out[0]["dtype"] == np.int8:
+            scale, zp = self.out[0]["quantization"]
+            output = (output - zp) * scale
+
+        # softmax
+        output = np.exp(output - np.max(output))
+        output /= output.sum()
+
+        class_id   = int(np.argmax(output))
+        confidence = float(output[class_id])
+        if len(output) == 5:
+            # Custom Model (5 classes directly)
+            CUSTOM_CLASSES = ["NO_SIGN", "SLOW_DOWN", "STOP", "TURN_LEFT", "TURN_RIGHT"]
+            gtsrb_name = "Custom Model"
+            if confidence >= CONFIDENCE_THRESHOLD:
+                robot_label = CUSTOM_CLASSES[class_id]
+            else:
+                robot_label = "NO_SIGN"
+        else:
+            # Original GTSRB Model (43 classes)
+            gtsrb_name = GTSRB_CLASSES.get(class_id, f"Class {class_id}")
+            robot_label = GTSRB_TO_ROBOT.get(class_id, "NO_SIGN") if confidence >= CONFIDENCE_THRESHOLD else "NO_SIGN"
+
+        return class_id, gtsrb_name, robot_label, confidence
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LIVE TEST LOOP
+# ─────────────────────────────────────────────────────────────────────────────
+def run_live_test(model_path, use_roi):
+    roi_filter = ColorROIFilter()
+    classifier = GTSRBClassifier(model_path)
+
+    import sys
+    if sys.platform == 'darwin':
+        cap = cv2.VideoCapture(0)
+    else:
+        cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
+        
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  FRAME_W)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_H)
-    
-    detector = SignDetector()
-    show_dbg, fps, prev_cmd = False, 0.0, ''
-    
+    cap.set(cv2.CAP_PROP_BUFFERSIZE,   1)
+
+    os.makedirs("snapshots", exist_ok=True)
+    snap_count = 0
+    fps_timer  = time.time()
+    fps        = 0.0
+    frame_count = 0
+
+    print("\nLive test running...")
+    print("  Hold each sign in front of the camera")
+    print("  Press S to save a snapshot")
+    print("  Press Q to quit")
+    print()
+
     while True:
-        t0 = time.time()
-        ok, frame = cap.read()
-        if not ok: break
-        
-        cmd, conf, bbox, processed, dbg_mask, dbg_shapes, dbg_edges = detector.detect(frame, show_dbg)
-        
-        if cmd != prev_cmd and cmd != 'NO_SIGN':
-            print(f' >>> {cmd} ({conf:.0%})')
-        prev_cmd = cmd
-        
-        dt = time.time() - t0
-        fps = 0.9 * fps + 0.1 / max(dt, 1e-4)
-        
-        display = draw(processed, cmd, conf, bbox, fps)
-        cv2.imshow('Camera 60% Crop', display)
-        
-        if show_dbg and dbg_shapes is not None:
-            cv2.imshow('Global Masks', debug_masks(dbg_mask))
-            cv2.imshow('ROI Shape Debug (Grayscale map)', dbg_shapes)
-            if dbg_edges is not None:
-                cv2.imshow('Canny Edges (ROI Projection)', dbg_edges)
+        ret, frame = cap.read()
+        if not ret:
+            continue
+
+        # frame = cv2.flip(frame, -1)   # flip if camera is upside-down
+        display = frame.copy()
+        frame_count += 1
+
+        # ── FPS counter ───────────────────────────────────────────────────────
+        if frame_count % 30 == 0:
+            fps = 30.0 / (time.time() - fps_timer)
+            fps_timer = time.time()
+
+        # ── Find ROI ──────────────────────────────────────────────────────────
+        m_red, m_yel, m_blu = None, None, None
+        if use_roi:
+            crop, box, m_red, m_yel, m_blu = roi_filter.find_roi(frame)
+        else:
+            # fallback: use centre 60% of frame as crop
+            h, w = frame.shape[:2]
+            m = 0.20
+            crop = frame[int(h*m):int(h*(1-m)), int(w*m):int(w*(1-m))]
+            box  = (int(w*m), int(h*m), int(w*0.6), int(h*0.6))
+
+        # ── Classify ──────────────────────────────────────────────────────────
+        if crop is not None and crop.size > 0:
+            class_id, gtsrb_name, robot_label, confidence = classifier.classify(crop)
+
+            # draw bounding box
+            if box:
+                x, y, bw, bh = box
+                box_color = (0,255,0) if robot_label != "NO_SIGN" else (100,100,100)
+                cv2.rectangle(display, (x,y), (x+bw, y+bh), box_color, 2)
+
+            # overlay text
+            _text(display, f"GTSRB: {gtsrb_name} ({class_id})", (5, 20),  (200,200,0))
+            _text(display, f"Robot: {robot_label}",              (5, 45),
+                  (0,255,0) if robot_label != "NO_SIGN" else (100,100,100))
+            _text(display, f"Conf:  {confidence:.2f}",           (5, 70),
+                  (0,255,0) if confidence >= CONFIDENCE_THRESHOLD else (0,100,255))
+
+            # big warning if confidence is low
+            if confidence < CONFIDENCE_THRESHOLD and robot_label != "NO_SIGN":
+                _text(display, "LOW CONFIDENCE", (5, 100), (0, 0, 255), scale=0.6)
+
+        else:
+            _text(display, "No ROI found", (5, 20), (100, 100, 100))
+
+        _text(display, f"FPS: {fps:.1f}", (FRAME_W-80, 20), (200,200,200))
+        _text(display, f"ROI: {'ON' if use_roi else 'OFF'}", (FRAME_W-80, 45), (200,200,200))
+
+        cv2.imshow("GTSRB Live Test", display)
+        if use_roi:
+            if m_red is not None: cv2.imshow("Mask: RED",    m_red)
+            if m_yel is not None: cv2.imshow("Mask: YELLOW", m_yel)
+            if m_blu is not None: cv2.imshow("Mask: BLUE",   m_blu)
             
         key = cv2.waitKey(1) & 0xFF
-        if key == ord('q'): break
-        elif key == ord('d'):
-            show_dbg = not show_dbg
-            if not show_dbg:
-                try: cv2.destroyWindow('Global Masks')
-                except: pass
-                try: cv2.destroyWindow('ROI Shape Debug (Grayscale map)')
-                except: pass
-                try: cv2.destroyWindow('Canny Edges (ROI Projection)')
-                except: pass
-                
+
+        if key == ord("q"):
+            break
+        elif key == ord("s"):
+            path = f"snapshots/snap_{snap_count:04d}.jpg"
+            cv2.imwrite(path, frame)
+            print(f"Snapshot saved → {path}")
+            snap_count += 1
+
     cap.release()
     cv2.destroyAllWindows()
 
-if __name__ == '__main__':
-    main()
+
+def _text(img, text, pos, color, scale=0.55):
+    cv2.putText(img, text, pos, cv2.FONT_HERSHEY_SIMPLEX, scale, (0,0,0),   3)
+    cv2.putText(img, text, pos, cv2.FONT_HERSHEY_SIMPLEX, scale, color,     1)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model",  default="sign_classifier_gtsrb_int8.tflite")
+    parser.add_argument("--no-roi", action="store_true",
+                        help="Skip color filter, use centre crop instead")
+    args = parser.parse_args()
+
+    run_live_test(args.model, use_roi=not args.no_roi)
