@@ -59,12 +59,12 @@ class YOLOv8Detector:
                 num_threads=num_threads,
                 experimental_delegates=[tflite.load_delegate('libXNNPACK.so')]
             )
-            if logger: logger.info("[YOLO] Loaded with XNNPACK hardware acceleration!")
-        except ValueError:
+            if logger: logger.info("[YOLO] Loaded explicit XNNPACK hardware acceleration!")
+        except (ValueError, OSError) as e:
             self.interpreter = tflite.Interpreter(
                 model_path=model_path, num_threads=num_threads)
-            if logger: logger.warn("[YOLO] XNNPACK not found. Running standard CPU execution.")
-
+            if logger: logger.warn(f"[YOLO] Explicit XNNPACK load failed ({e}). Running standard initialization (XNNPACK may be built-in).")
+            
         self.interpreter.allocate_tensors()
         self.inp = self.interpreter.get_input_details()[0]
         self.out = self.interpreter.get_output_details()[0]
