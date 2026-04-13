@@ -11,8 +11,8 @@ import os
 # ═══════════════════════════════════════════════════════════
 
 RED_RANGES = [
-    (np.array([0, 70, 50]), np.array([15, 255, 255])),   
-    (np.array([155, 70, 50]), np.array([180, 255, 255]))
+    (np.array([0, 120, 100]), np.array([10, 255, 255])),   
+    (np.array([170, 120, 100]), np.array([180, 255, 255])) 
 ]
 
 YELLOW_RANGE = (
@@ -358,16 +358,13 @@ class SignDetectionNode(Node):
         # full_path = os.path.join(package_share_directory, filename)
         # frame = cv2.imread(full_path)
 
-        ret, frame = self.cap.read()
-        
+        ret, frame = self.cap.read()       
         if not ret or frame is None:
             self.get_logger().error("Failed to capture frame from camera")
             return        
         
-        if frame is None:
-            self.get_logger().error(f"Could not open/read file: {full_path}")
-            return
-        
+        frame = cv2.flip(frame, -1)
+
         proc_start = time.time()
         detections, processed, hsv, debug_masks = self.detect(frame)
         command, conf = self.vote(detections)
