@@ -5,19 +5,19 @@ import cv2
 import numpy as np
 import time
 from collections import deque
-
+import os
 # ═══════════════════════════════════════════════════════════
 #  HSV Color Ranges
 # ═══════════════════════════════════════════════════════════
 
 RED_RANGES = [
-    (np.array([0,   150, 120]),  np.array([8,   255, 255])),
-    (np.array([172, 150, 120]),  np.array([179, 255, 255]))
+    (np.array([0, 70, 50]), np.array([15, 255, 255])),   
+    (np.array([155, 70, 50]), np.array([180, 255, 255]))
 ]
 
 YELLOW_RANGE = (
-    np.array([20, 120, 120]),
-    np.array([30, 255, 255])
+    np.array([15, 80, 80]), 
+    np.array([35, 255, 255])
 )
 BLUE_RANGE   = (np.array([100, 80, 60]),  np.array([130, 255, 255]))
 
@@ -81,7 +81,7 @@ class SignDetectionNode(Node):
         self.declare_parameter('epsilon_factor', 0.02)
         self.declare_parameter('vote_window', 15)
         self.declare_parameter('vote_threshold', 11)
-        self.declare_parameter('show_gui', False)
+        self.declare_parameter('show_gui', True)
         
         # Load parameters
         self.min_area = self.get_parameter('min_area').value
@@ -112,6 +112,9 @@ class SignDetectionNode(Node):
         
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+        self.test_images = [ "Turnn.png","SlowDown.png", "Stop.png"]
+        self.img_idx = 0
 
         # ROS Publisher for vehicle commands
         self.command_publisher = self.create_publisher(
@@ -147,11 +150,12 @@ class SignDetectionNode(Node):
 
     # ── main pipeline ────────────────────────────────────
     def detect(self, frame):
-        """Returns (detections_list, processed_frame, hsv_frame, debug_masks)."""
+        """Returns ([best_detection], processed_frame, hsv_frame, debug_masks)."""
         processed = self.preprocess(frame)
         hsv = cv2.cvtColor(processed, cv2.COLOR_BGR2HSV)
 
-        # --- CREATE MASKS FOR DEBUG ---
+        # --- 1. INITIALIZE DEBUG MASKS ---
+        # Defining this early prevents the NameError
         red_mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
         for lo, hi in RED_RANGES:
             red_mask = cv2.bitwise_or(red_mask, cv2.inRange(hsv, lo, hi))
@@ -165,13 +169,23 @@ class SignDetectionNode(Node):
             "blue": self._clean_mask(blue_mask)
         }
 
-        # --- ORIGINAL DETECTION (UNCHANGED) ---
-        detections = []
-        detections += self._find_red(hsv)
-        detections += self._find_yellow(hsv)
-        detections += self._find_blue(hsv, processed)
+        # --- 2. GATHER ALL DETECTIONS ---
+        all_found = []
+        all_found += self._find_blue(hsv, processed)
+        all_found += self._find_yellow(hsv)
+        all_found += self._find_red(hsv)
 
-        return detections, processed, hsv, debug_masks
+        # --- 3. SELECT THE SINGLE BEST CANDIDATE ---
+        best_detection = []
+        if all_found:
+            # Sort by area (width * height)
+            all_found.sort(key=lambda x: x[2][2] * x[2][3], reverse=True)
+            
+            # Keep only the largest sign found
+            best_detection = [all_found[0]]
+
+        # --- 4. SAFE RETURN ---
+        return best_detection, processed, hsv, debug_masks
 
     # ── red  →  STOP ─────────────────────────────────────
     def _find_red(self, hsv):
@@ -179,54 +193,69 @@ class SignDetectionNode(Node):
         for lo, hi in RED_RANGES:
             mask = cv2.bitwise_or(mask, cv2.inRange(hsv, lo, hi))
         mask = self._clean_mask(mask)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area > 400: # Catch even small distant red blobs
+                peri = cv2.arcLength(cnt, True)
+                circ = (4 * np.pi * area) / (peri**2) if peri > 0 else 0
+                approx = cv2.approxPolyDP(cnt, 0.03 * peri, True)
+                verts = len(approx)
+                print(f"[RED DEBUG] Area: {area:.0f} | Circ: {circ:.2f} | Verts: {verts}")
+        
+        # Use more permissive settings for the Octagon
         return self._classify_contours(mask, 'STOP',
-                                       min_vertices=6, max_vertices=12,
-                                       min_circularity=0.55)
-
+                                       min_vertices=3,
+                                       max_vertices=15,
+                                       min_circularity=0.25) 
     # ── yellow  →  SLOW_DOWN ─────────────────────────────
     def _find_yellow(self, hsv):
         lo, hi = YELLOW_RANGE
         mask = cv2.inRange(hsv, lo, hi)
-        mask = self._clean_mask(mask)
-        return self._classify_contours(mask, 'SLOW_DOWN',
-                                       min_vertices=3, max_vertices=8,
-                                       min_circularity=0.3)
+        mask = self._clean_mask(mask)       
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)      
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area > 500:
+                peri = cv2.arcLength(cnt, True)
+                circ = (4 * np.pi * area) / (peri**2) if peri > 0 else 0
+                approx = cv2.approxPolyDP(cnt, 0.04 * peri, True)
+                verts = len(approx)
+                print(f"[YELLOW DEBUG] Area: {area:.0f} | Circ: {circ:.2f} | Verts: {verts}")
+        return self._classify_contours(mask, 'SLOW_DOWN', 
+                                       min_vertices=3, max_vertices=10, 
+                                       min_circularity=0.1)
 
     # ── blue  →  TURN_LEFT / TURN_RIGHT ──────────────────
     def _find_blue(self, hsv, frame):
         blue_mask = cv2.inRange(hsv, self.lower_blue, self.upper_blue)
+        kernel = np.ones((5, 5), np.uint8)
+        blue_mask = cv2.morphologyEx(blue_mask, cv2.MORPH_OPEN, kernel)        
         contours, _ = cv2.findContours(blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
         blue_detections = []
         max_area_found = 0
         best_circularity = 0
-        
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            if area > max_area_found:
-                max_area_found = area
-            
+            if area > max_area_found: max_area_found = area           
             perimeter = cv2.arcLength(cnt, True)
-            if perimeter > 0:
-                circ = (4 * np.pi * area) / (perimeter ** 2)
-                if circ > best_circularity:
-                    best_circularity = circ
-
+            circ = (4 * np.pi * area) / (perimeter ** 2) if perimeter > 0 else 0
+            if circ > best_circularity: best_circularity = circ
+            if area > 800: # Only print for reasonably sized blobs
+                print(f"[BLUE DEBUG] Area: {area:.0f} | Circ: {circ:.2f}")
             if self.min_area < area < self.max_area:
                 if self._is_circular(cnt):
                     x, y, w, h = cv2.boundingRect(cnt)
                     roi = self.extract_roi(cnt, frame)
-                    direction = self._arrow_direction(roi)
-                    
+                    direction = self._arrow_direction(roi)                 
                     if direction:
                         label = direction if "TURN_" in direction else f"TURN_{direction}"
                         blue_detections.append((label, 1.0, (x, y, w, h)))
-
         return blue_detections
 
     # ── arrow direction ─────────────────────────────────
     def _arrow_direction(self, roi):
-        if roi.size == 0 or roi.shape[0] < 20 or roi.shape[1] < 20:
+        if roi.size == 0 or roi.shape[0] < 15 or roi.shape[1] < 15:
             return None
 
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
@@ -321,73 +350,56 @@ class SignDetectionNode(Node):
 
     # ── ros timer callback ───────────────────────────────
     def timer_callback(self):
-        t_start = time.time()
-        ok, frame = self.cap.read()
-        if not ok:
-            return
+        #package_share_directory = os.path.dirname(os.path.realpath(__file__))
+        #test_images = ["Turnn.png"]
+        #test_images = ["Stop.png"]
+        # test_images = ["SlowDown.png"]
+        # filename = test_images[self.img_idx]
+        # full_path = os.path.join(package_share_directory, filename)
+        # frame = cv2.imread(full_path)
+
+        ret, frame = self.cap.read()
         
-        # Rotate 180 degrees (-1) or remove completely if no flip is needed
-        frame = cv2.flip(frame, -1)
+        if not ret or frame is None:
+            self.get_logger().error("Failed to capture frame from camera")
+            return        
+        
+        if frame is None:
+            self.get_logger().error(f"Could not open/read file: {full_path}")
+            return
         
         proc_start = time.time()
         detections, processed, hsv, debug_masks = self.detect(frame)
         command, conf = self.vote(detections)
         proc_ms = (time.time() - proc_start) * 1000 
 
-        # Only publish actual signs or NO_SIGN? Publish command
         msg = String()
-        # For compatibility with earlier setups, let's map NO_SIGN -> NO_SIGNAL if needed.
-        # But 'NO_SIGN' is ok too. Let's just output command.
-        if command == 'NO_SIGN':
-            msg.data = "NO_SIGNAL"
-        else:
-            msg.data = command
-            
+        msg.data = "NO_SIGNAL" if command == 'NO_SIGN' else command
         self.command_publisher.publish(msg)
 
-        # FPS Tracking
         dt = time.time() - self.t_start_fps
         self.fps = 0.9 * self.fps + 0.1 / max(dt, 1e-4)
         self.t_start_fps = time.time()
 
-        # Log significant changes
         if command != self.prev_cmd and command != 'NO_SIGN':
-            self.get_logger().info(f'>>> {command:10} | Conf: {conf:.0%} | Latency: {proc_ms:>4.1f}ms | {self.fps:.0f} FPS')
+            self.get_logger().info(f'>>> {command:10} | Conf: {conf:.0%} | {proc_ms:>4.1f}ms | {self.fps:.0f} FPS')
         self.prev_cmd = command
 
-        # GUI Display
         if self.show_gui:
             display = draw_gui(cv2.resize(frame, (640, 480)), detections, command, conf, self.fps)
+            
+            # Efficient mask processing
+            mask_h, mask_w = 160, 640 // 3
+            vis = [cv2.cvtColor(debug_masks[k], cv2.COLOR_GRAY2BGR) for k in ["red", "yellow", "blue"]]
+            vis[0] = cv2.resize(vis[0], (mask_w, mask_h))
+            vis[1] = cv2.resize(vis[1], (mask_w, mask_h))
+            vis[2] = cv2.resize(vis[2], (640 - 2*mask_w, mask_h))
 
-            # Convert masks to 3-channel
-            red_vis    = cv2.cvtColor(debug_masks["red"], cv2.COLOR_GRAY2BGR)
-            yellow_vis = cv2.cvtColor(debug_masks["yellow"], cv2.COLOR_GRAY2BGR)
-            blue_vis   = cv2.cvtColor(debug_masks["blue"], cv2.COLOR_GRAY2BGR)
-
-            # --- FIXED RESIZING ---
-            mask_h = 160
-            mask_w = 640 // 3
-
-            red_vis    = cv2.resize(red_vis, (mask_w, mask_h))
-            yellow_vis = cv2.resize(yellow_vis, (mask_w, mask_h))
-            blue_vis   = cv2.resize(blue_vis, (640 - 2*mask_w, mask_h))
-
-            # Stack masks
-            masks_row = np.hstack((red_vis, yellow_vis, blue_vis))
-
-            # Resize main display
-            display_small = cv2.resize(display, (640, 320))
-
-            # Combine safely
-            combined = np.vstack((display_small, masks_row))
-
-            # Labels
-            cv2.putText(combined, "RED", (10, 340),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 1)
-            cv2.putText(combined, "YELLOW", (230, 340),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,255), 1)
-            cv2.putText(combined, "BLUE", (460, 340),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 1)
+            combined = np.vstack((cv2.resize(display, (640, 320)), np.hstack(vis)))
+            
+            cv2.putText(combined, "RED", (10, 340), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 1)
+            cv2.putText(combined, "YELLOW", (230, 340), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,255), 1)
+            cv2.putText(combined, "BLUE", (460, 340), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 1)
 
             cv2.imshow('Sign Detection Debug', combined)
             cv2.waitKey(1)
