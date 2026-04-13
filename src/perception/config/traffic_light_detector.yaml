@@ -1,19 +1,18 @@
 traffic_light_detector_node:
   ros__parameters:
-
     # ── Circle Detection (HoughCircles) ──────────────────────────
-    dp: 2.0                    # Inverse accumulator resolution ratio (Higher = Much faster, less precise)
-    min_dist: 10.0             # Min distance between circle centers (px)
-    param1: 200.0              # Canny threshold (Increased to ignore weak texture/noise)
-    param2: 40.0               # Accumulator threshold (Increased to demand more perfect circles)
-    min_radius: 5             # Min circle radius (px)
-    max_radius: 25             # Max circle radius (px)
+    dp: 2.0 # Inverse accumulator resolution ratio (Higher = Much faster, less precise)
+    min_dist: 10.0 # Min distance between circle centers (px)
+    param1: 200.0 # Canny threshold (Increased to ignore weak texture/noise)
+    param2: 40.0 # Accumulator threshold (Increased to demand more perfect circles)
+    min_radius: 4 # Min circle radius (px)
+    max_radius: 30 # Max circle radius (px)
 
     # ── ROI ──────────────────────────────────────────────────────
-    roi_height_ratio: 0.8      # Fraction of image height from top
+    roi_height_ratio: 0.8 # Fraction of image height from top
 
     # ── Filtering ────────────────────────────────────────────────
-    min_brightness: 30         # Weak brightness floor (rejects very dark noise only)
+    min_brightness: 30 # Weak brightness floor (rejects very dark noise only)
 
     # ── Color Thresholds (HSV) ───────────────────────────────────
     # Red range 1 (low hue)
@@ -30,16 +29,16 @@ traffic_light_detector_node:
     green_upper: [90, 255, 255]
 
     # ── Clustering ───────────────────────────────────────────────
-    max_circle_distance: 100.0  # Max center-to-center distance to cluster (px)
-    radius_tolerance: 0.5      # Max relative radius difference (ratio)
+    max_circle_distance: 100.0 # Max center-to-center distance to cluster (px)
+    radius_tolerance: 0.5 # Max relative radius difference (ratio)
 
     # ── Temporal Filtering ───────────────────────────────────────
-    min_confirm_frames: 5      # Consecutive frames needed to confirm a state
+    min_confirm_frames: 5 # Consecutive frames needed to confirm a state
 
     # ── Tracking ─────────────────────────────────────────────────
-    tracking_expansion: 1.5    # Multiplier to expand tracked bbox as search window
-    tracking_lost_frames: 5    # Consecutive failed frames before reverting to DETECTION
+    tracking_expansion: 1.5 # Multiplier to expand tracked bbox as search window
+    tracking_lost_frames: 5 # Consecutive failed frames before reverting to DETECTION
 
     # ── Stream ───────────────────────────────────────────────────
-    processing_rate: 10.0      # Pipeline processing rate in Hz
-    show_debug_display: true   # Whether to show the OpenCV debug windows locally
+    processing_rate: 10.0 # Pipeline processing rate in Hz
+    show_debug_display: true # Whether to show the OpenCV debug windows locally
