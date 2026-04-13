@@ -11,7 +11,7 @@ import os
 # ═══════════════════════════════════════════════════════════
 
 RED_RANGES = [
-    (np.array([0, 120, 100]), np.array([10, 255, 255])),   
+    (np.array([0, 130, 110]), np.array([10, 255, 255])),   
     (np.array([170, 120, 100]), np.array([180, 255, 255])) 
 ]
 
@@ -196,12 +196,12 @@ class SignDetectionNode(Node):
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            if area > 400: # Catch even small distant red blobs
+            if area > self.min_area: # Catch even small distant red blobs
                 peri = cv2.arcLength(cnt, True)
                 circ = (4 * np.pi * area) / (peri**2) if peri > 0 else 0
                 approx = cv2.approxPolyDP(cnt, 0.03 * peri, True)
                 verts = len(approx)
-                print(f"[RED DEBUG] Area: {area:.0f} | Circ: {circ:.2f} | Verts: {verts}")
+                #print(f"[RED DEBUG] Area: {area:.0f} | Circ: {circ:.2f} | Verts: {verts}")
         
         # Use more permissive settings for the Octagon
         return self._classify_contours(mask, 'STOP',
@@ -216,12 +216,12 @@ class SignDetectionNode(Node):
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)      
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            if area > 500:
+            if area > self.min_area: # Print debug for moderately sized yellow blobs
                 peri = cv2.arcLength(cnt, True)
                 circ = (4 * np.pi * area) / (peri**2) if peri > 0 else 0
                 approx = cv2.approxPolyDP(cnt, 0.04 * peri, True)
                 verts = len(approx)
-                print(f"[YELLOW DEBUG] Area: {area:.0f} | Circ: {circ:.2f} | Verts: {verts}")
+                #print(f"[YELLOW DEBUG] Area: {area:.0f} | Circ: {circ:.2f} | Verts: {verts}")
         return self._classify_contours(mask, 'SLOW_DOWN', 
                                        min_vertices=3, max_vertices=10, 
                                        min_circularity=0.1)
@@ -242,7 +242,8 @@ class SignDetectionNode(Node):
             circ = (4 * np.pi * area) / (perimeter ** 2) if perimeter > 0 else 0
             if circ > best_circularity: best_circularity = circ
             if area > 800: # Only print for reasonably sized blobs
-                print(f"[BLUE DEBUG] Area: {area:.0f} | Circ: {circ:.2f}")
+                #print(f"[BLUE DEBUG] Area: {area:.0f} | Circ: {circ:.2f}")
+                pass
             if self.min_area < area < self.max_area:
                 if self._is_circular(cnt):
                     x, y, w, h = cv2.boundingRect(cnt)
@@ -363,7 +364,8 @@ class SignDetectionNode(Node):
             self.get_logger().error("Failed to capture frame from camera")
             return        
         
-        frame = cv2.flip(frame, -1)
+        frame = cv2.flip(frame, 1)
+        #frame = cv2.flip(frame, -1)
 
         proc_start = time.time()
         detections, processed, hsv, debug_masks = self.detect(frame)
