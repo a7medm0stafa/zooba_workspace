@@ -1,24 +1,25 @@
 # ============================================================================
-# Sign Detection Node Parameters (GTSRB TFLite version)
+# Sign Detection Node Parameters (YOLOv8 TFLite version)
 # ============================================================================
-# This node uses a fine-tuned 5-class GTSRB model to detect signs and
-# publishes VehicleCmd to the mid-level controller pipeline.
+# This node uses a YOLOv8 INT8 model to detect signs directly from the 
+# full camera frame and publishes VehicleCmd to the mid-level controller.
 # ============================================================================
 
 perception:
   sign_detection_node:
     ros__parameters:
 
-      # ── TFLite Model ──────────────────────────────────────────────────────
-      # Leave empty to auto-detect from perception/model/ folder
+      # ── YOLOv8 TFLite Model ───────────────────────────────────────────────
+      # Leave empty to auto-detect from perception/model/best_int8.tflite
       model_path: ""
-      crop_size: 64
-      num_threads: 2
-      confidence_threshold: 0.75
+      imgsz: 320                 # Must match the export size from Colab
+      num_threads: 4             # Maximize Pi 4 ARM cores
+      confidence_threshold: 0.60 # Minimum confidence to accept a bounding box
+      iou_threshold: 0.45        # NMS threshold for overlapping boxes
 
       # ── Camera ────────────────────────────────────────────────────────────
       camera_index: 0
-      frame_width: 320
+      frame_width: 320           # Capturing directly at YOLO resolution saves CPU
       frame_height: 240
       flip_camera: true
       publish_rate: 20.0
@@ -33,7 +34,6 @@ perception:
       clear_frames: 6
 
       # ── Topics (pub/sub) ──────────────────────────────────────────────────
-      # cmd_output_topic → feeds into nonholonomic_constraints_node
       cmd_output_topic: "/teleop/raw_cmd"
       sign_topic: "/perception/sign_detected"
 
@@ -44,27 +44,3 @@ perception:
       turn_velocity: 0.35        # m/s — speed during turns
       turn_heading: 20.0         # degrees — steering angle for turns
       stop_duration: 3.0         # seconds — how long to stop at STOP sign
-
-      # ── HSV Color Ranges ──────────────────────────────────────────────────
-      # Red (2 ranges to handle hue wrap-around)
-      # MUCH better for real-world
-      red_range1_low:  [0, 100, 80]
-      red_range1_high: [12, 255, 255]
-      red_range2_low:  [165, 100, 80]
-      red_range2_high: [179, 255, 255]
-
-      # Yellow
-      yellow_range_low:  [20, 150, 150]
-      yellow_range_high: [35, 255, 255]
-
-      # Blue
-      blue_range_low:  [105, 150, 120]
-      blue_range_high: [125, 255, 255]
-
-      # ── ROI Filter Geometry ───────────────────────────────────────────────
-      min_area: 1000
-      max_area: 150000
-      ignore_bottom_percent: 0.40    # Discard bottom 40% of frame (floor)
-      min_aspect_ratio: 0.65
-      max_aspect_ratio: 1.45
-      min_solidity: 0.73

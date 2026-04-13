@@ -1,7 +1,7 @@
 """
 sign_detection.launch.py
 ========================
-Launch the GTSRB TFLite sign detection node.
+Launch the YOLOv8 TFLite sign detection node.
 
 Usage:
   ros2 launch perception sign_detection.launch.py
