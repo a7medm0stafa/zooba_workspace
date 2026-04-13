@@ -57,6 +57,13 @@ class SignDetector:
         self.vote_threshold = 11        # need 11/15 agreeing frames
         self.history = deque(maxlen=self.vote_window)
 
+               # Standard Blue HSV ranges (H: 100-130, S: 150-255, V: 50-255)
+        self.lower_blue = np.array([100, 150, 40])
+        self.upper_blue = np.array([130, 255, 255])
+        
+        # Time tracker for the 1-second debug print we just added
+        self.last_debug_time = time.time()
+
     # ── preprocessing ────────────────────────────────────
 
     def preprocess(self, frame):
@@ -115,71 +122,109 @@ class SignDetector:
 
     # ── blue  →  TURN_LEFT / TURN_RIGHT ──────────────────
 
-    def _find_blue(self, hsv, processed):
-        lo, hi = BLUE_RANGE
-        mask = cv2.inRange(hsv, lo, hi)
-        mask = self._clean_mask(mask)
+    def _find_blue(self, hsv, frame):
+        blue_mask = cv2.inRange(hsv, self.lower_blue, self.upper_blue)
+        contours, _ = cv2.findContours(blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        detections = []
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL,
-                                       cv2.CHAIN_APPROX_SIMPLE)
+        blue_detections = []
+        
+        # Variables for 1-second debug summary
+        max_area_found = 0
+        best_circularity = 0
+        
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            if area < self.min_area or area > self.max_area:
-                continue
-            x, y, w, h = cv2.boundingRect(cnt)
-            ar = w / h if h else 0
-            if not (0.5 < ar < 2.0):
-                continue
+            if area > max_area_found:
+                max_area_found = area
+            
+            # Calculate circularity for the biggest blob even if it's small
+            perimeter = cv2.arcLength(cnt, True)
+            if perimeter > 0:
+                circ = (4 * np.pi * area) / (perimeter ** 2)
+                if circ > best_circularity:
+                    best_circularity = circ
 
-            # Extract ROI and determine arrow direction
-            roi = processed[y:y+h, x:x+w]
-            direction = self._arrow_direction(roi)
-            if direction:
-                detections.append((f'TURN_{direction}', 0.70, (x, y, w, h)))
-        return detections
+            # Actual Detection Logic
+            if self.min_area < area < self.max_area:
+                if self._is_circular(cnt):
+                    x, y, w, h = cv2.boundingRect(cnt)
+                    roi = self.extract_roi(cnt, frame)
+                    direction = self._arrow_direction(roi)
+                    
+                    if direction:
+                        label = direction if "TURN_" in direction else f"TURN_{direction}"
+                        blue_detections.append((label, 1.0, (x, y, w, h)))
 
-    # ── arrow direction ──────────────────────────────────
+        # ── ONE-SECOND DEBUG PRINT ──
+        current_time = time.time()
+        if current_time - self.last_debug_time > 1.0:
+            print(f"[DEBUG 1s] Best Area: {max_area_found:>5.0f} (Min:{self.min_area}) | "
+                  f"Best Circ: {best_circularity:>4.2f} (Target:>0.55)")
+            self.last_debug_time = current_time
 
+        return blue_detections
+
+    # ── arrow direction ─────────────────────────────────
     def _arrow_direction(self, roi):
-        """Determine LEFT or RIGHT based strictly on pixel mass distribution."""
         if roi.size == 0 or roi.shape[0] < 20 or roi.shape[1] < 20:
             return None
 
         # 1. Pre-processing
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        # 140 is a "sweet spot" to keep the arrow solid without picking up blue noise
         _, white = cv2.threshold(gray, 140, 255, cv2.THRESH_BINARY)
         
-        # Smooth the arrow to fill any gaps
         kern = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
         white = cv2.morphologyEx(white, cv2.MORPH_CLOSE, kern)
 
+        # 2. Strategic Crop
+        # Arrows are centered; ignoring the top/bottom 10% avoids rim noise
         h, w = white.shape
+        margin = int(h * 0.1)
+        focused_zone = white[margin:h-margin, :]
 
-        left_pixels  = cv2.countNonZero(white[:, :w//2])
-        right_pixels = cv2.countNonZero(white[:, w//2:])
+        # 3. Mass Analysis
+        left_pixels  = cv2.countNonZero(focused_zone[:, :w//2])
+        right_pixels = cv2.countNonZero(focused_zone[:, w//2:])
         total = left_pixels + right_pixels
-        if total == 0:
-            return None
+        
+        if total == 0: return None
+        
         ratio = (left_pixels - right_pixels) / total
-        if ratio > 0.05:
+
+        # 4. Decisive Logic
+        # Increased threshold to 0.08 to be more robust against minor noise
+        if ratio > 0.08:
             return 'LEFT'
-        elif ratio < -0.05:
+        elif ratio < -0.08:
             return 'RIGHT'
 
         return None
 
-    @staticmethod
-    def _hull_angle(pts, idx, n):
-        """Interior angle at pts[idx] on the convex hull."""
-        p = pts[(idx - 1) % n].astype(float)
-        q = pts[idx].astype(float)
-        r = pts[(idx + 1) % n].astype(float)
-        v1 = p - q
-        v2 = r - q
-        cos_a = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-6)
-        return np.degrees(np.arccos(np.clip(cos_a, -1, 1)))
+    def extract_roi(self, contour, frame):
+        """Crops the frame to the bounding box of the sign contour."""
+        x, y, w, h = cv2.boundingRect(contour)
+        
+        # Safety check to stay within frame boundaries
+        y_start = max(0, y)
+        y_end   = min(frame.shape[0], y + h)
+        x_start = max(0, x)
+        x_end   = min(frame.shape[1], x + w)
+        
+        roi = frame[y_start:y_end, x_start:x_end]
+        return roi
+
+    def _is_circular(self, contour):
+        """Verify the outer blue shape is a circle before checking the arrow."""
+        area = cv2.contourArea(contour)
+        perimeter = cv2.arcLength(contour, True)
+        if perimeter == 0: return False
+        
+        # Circularity formula: (4 * pi * Area) / (Perimeter^2)
+        circularity = (4 * np.pi * area) / (perimeter ** 2)
+        
+        # 0.7 allows for some perspective distortion (viewing at an angle)
+        # Anything lower is likely a square, rectangle, or background noise.
+        return 0.7 < circularity < 1.2
 
     @staticmethod
     def _arrow_by_mass(white_mask):
@@ -203,6 +248,19 @@ class SignDetector:
             return 'RIGHT'
             
         return None
+
+    @staticmethod
+    def _hull_angle(pts, idx, n):
+        """Interior angle at pts[idx] on the convex hull."""
+        p = pts[(idx - 1) % n].astype(float)
+        q = pts[idx].astype(float)
+        r = pts[(idx + 1) % n].astype(float)
+        v1 = p - q
+        v2 = r - q
+        cos_a = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-6)
+        return np.degrees(np.arccos(np.clip(cos_a, -1, 1)))
+
+
 
     # ── shared helpers ───────────────────────────────────
 
@@ -358,29 +416,38 @@ def main():
     print('\nCamera ready — hold signs in front of the camera.\n')
 
     while True:
-        t0 = time.time()
+        t_start = time.time() # Start of frame
         ok, frame = cap.read()
+        if not ok: break
         frame = cv2.flip(frame, 1)
-        if not ok:
-            break
 
+        # ── Measure Logic Processing ──
+        proc_start = time.time()
+        
         detections, processed, hsv = det.detect(frame)
         command, conf = det.vote(detections)
+        
+        proc_end = time.time()
+        # Calculate processing time in milliseconds
+        proc_ms = (proc_end - proc_start) * 1000 
+        # ──────────────────────────────
 
-        dt = time.time() - t0
+        dt = time.time() - t_start
         fps = 0.9 * fps + 0.1 / max(dt, 1e-4)
 
+        # Update display to show ms
         display = draw(cv2.resize(frame, (640, 480)),
                        detections, command, conf, fps)
+        
+        # Add a small text overlay for MS if your draw() function doesn't
+        cv2.putText(display, f"{proc_ms:.1f} ms", (10, 450), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        
         cv2.imshow('Sign Detection', display)
 
-        if show_dbg:
-            cv2.imshow('Color Masks  (R | Y | B)', debug_masks(hsv))
-            cv2.imshow('Processed', processed)
-
-        # Log command changes
+        # Log with MS info
         if command != prev_cmd and command != 'NO_SIGN':
-            print(f'  >>> {command}  (confidence {conf:.0%},  {fps:.0f} FPS)')
+            print(f'  >>> {command:10} | Conf: {conf:.0%} | Latency: {proc_ms:>4.1f}ms | {fps:.0f} FPS')
         prev_cmd = command
 
         # ── key handling ──
