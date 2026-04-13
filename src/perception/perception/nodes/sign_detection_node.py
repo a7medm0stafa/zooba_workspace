@@ -47,14 +47,28 @@ class SignDetector:
         self.BLUE_RANGE   = (np.array(p['blue_range_low']),   np.array(p['blue_range_high']))
 
     def detect(self, original_frame, show_dbg=False):
+        import time
+        timings = {}
+        t_start = time.perf_counter()
+
         img = cv2.resize(original_frame, (FRAME_W, FRAME_H))
         y_end = int(FRAME_H * self.crop_top_percentage)
         img_bgr = img[0:y_end, :]
 
+        # Boost overall brightness & contrast since camera output is dark
+        img_bgr = cv2.convertScaleAbs(img_bgr, alpha=1.2, beta=30)
+        
+        t_resize = time.perf_counter()
+        timings['Resize/Bright'] = t_resize - t_start
+
         hsv_raw = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
         h, s, v = cv2.split(hsv_raw)
-        v = np.clip(cv2.add(v, 20), 0, 255).astype(np.uint8)
+        # Increase V channel boost further (40 instead of 20)
+        v = np.clip(cv2.add(v, 40), 0, 255).astype(np.uint8)
         hsv = cv2.merge((h, s, v))
+
+        t_hsv = time.perf_counter()
+        timings['HSV'] = t_hsv - t_resize
 
         detections = []
         if show_dbg:
@@ -73,17 +87,26 @@ class SignDetector:
         det_r = self._process_pipeline('STOP', clean_r, img_bgr, 6, 14, self.stop_min_circularity, debug_shapes, debug_edges, (0, 0, 255))
         detections.extend(det_r)
 
+        t_red = time.perf_counter()
+        timings['Red'] = t_red - t_hsv
+
         # Yellow Pipeline
         mask_y = cv2.inRange(hsv, *self.YELLOW_RANGE)
         clean_y = self._clean(mask_y)
         det_y = self._process_pipeline('SLOW_DOWN', clean_y, img_bgr, 3, 6, self.slow_min_circularity, debug_shapes, debug_edges, (0, 255, 255))
         detections.extend(det_y)
 
+        t_yellow = time.perf_counter()
+        timings['Yellow'] = t_yellow - t_red
+
         # Blue Pipeline
         mask_b = cv2.inRange(hsv, *self.BLUE_RANGE)
         clean_b = self._clean(mask_b)
         det_b = self._process_blue_pipeline(clean_b, img_bgr, debug_shapes, debug_edges)
         detections.extend(det_b)
+
+        t_blue = time.perf_counter()
+        timings['Blue'] = t_blue - t_yellow
 
         clean_masks = (clean_r, clean_y, clean_b) if show_dbg else None
 
@@ -95,7 +118,7 @@ class SignDetector:
             best_det = max(detections, key=lambda d: d[1])
             best_cmd, best_conf, best_bbox = best_det
 
-        return best_cmd, best_conf, best_bbox, img_bgr, clean_masks, debug_shapes, debug_edges
+        return best_cmd, best_conf, best_bbox, img_bgr, clean_masks, debug_shapes, debug_edges, timings
 
     def _clean(self, mask):
         k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
@@ -368,13 +391,18 @@ class SignDetectionNode(Node):
             return
 
         if self.flip_horizontal:
-            frame = cv2.flip(frame, 1)
+            # -1 flips both horizontally and vertically (180 degree rotation)
+            frame = cv2.flip(frame, -1)
 
         # ── Detection ──
-        cmd, conf, bbox, processed, dbg_mask, dbg_shapes, dbg_edges = self.detector.detect(frame, self.show_gui)
+        cmd, conf, bbox, processed, dbg_mask, dbg_shapes, dbg_edges, timings = self.detector.detect(frame, self.show_gui)
 
         dt = time.time() - t0
         self.fps = 0.9 * self.fps + 0.1 / max(dt, 1e-4)
+
+        # ── Log timings ──
+        timing_str = " | ".join([f"{k}:{v*1000:.1f}ms" for k, v in timings.items()])
+        self.get_logger().info(f"[Time] {timing_str} | Total:{dt*1000:.1f}ms", throttle_duration_sec=0.5)
 
         # ── Publish VehicleCmd ──
         vel, hdg = self.sign_commands.get(cmd, (self.cruise_velocity, 0.0))
