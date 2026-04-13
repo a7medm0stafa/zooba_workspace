@@ -359,23 +359,26 @@ class SignDetectionNode(Node):
         if self.show_gui:
             display = draw_gui(cv2.resize(frame, (640, 480)), detections, command, conf, self.fps)
 
-            # Convert masks to 3-channel for stacking
+            # Convert masks to 3-channel
             red_vis    = cv2.cvtColor(debug_masks["red"], cv2.COLOR_GRAY2BGR)
             yellow_vis = cv2.cvtColor(debug_masks["yellow"], cv2.COLOR_GRAY2BGR)
             blue_vis   = cv2.cvtColor(debug_masks["blue"], cv2.COLOR_GRAY2BGR)
 
-            # Resize masks to match display height
-            red_vis    = cv2.resize(red_vis, (213, 160))
-            yellow_vis = cv2.resize(yellow_vis, (213, 160))
-            blue_vis   = cv2.resize(blue_vis, (213, 160))
+            # --- FIXED RESIZING ---
+            mask_h = 160
+            mask_w = 640 // 3
 
-            # Stack masks horizontally
+            red_vis    = cv2.resize(red_vis, (mask_w, mask_h))
+            yellow_vis = cv2.resize(yellow_vis, (mask_w, mask_h))
+            blue_vis   = cv2.resize(blue_vis, (640 - 2*mask_w, mask_h))
+
+            # Stack masks
             masks_row = np.hstack((red_vis, yellow_vis, blue_vis))
 
             # Resize main display
             display_small = cv2.resize(display, (640, 320))
 
-            # Stack vertically: main + masks
+            # Combine safely
             combined = np.vstack((display_small, masks_row))
 
             # Labels
