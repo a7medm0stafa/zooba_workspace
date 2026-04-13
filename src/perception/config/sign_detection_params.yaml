@@ -1,0 +1,40 @@
+perception:
+  sign_detection_node:
+    ros__parameters:
+      # Velocity / Movement mappings
+      cruise_velocity: 0.5
+      slow_velocity: 0.3
+      turn_heading: 20.0
+
+      # Camera
+      camera_index: 0
+      flip_horizontal: true
+      publish_rate: 20.0
+      show_gui: false
+      
+      # Topics
+      output_topic: "/vehicle/cmd"
+      sign_topic: "/perception/sign_detected"
+
+      # Core Pipeline Paramters
+      crop_top_percentage: 0.60
+      min_area: 1200
+      max_area: 120000
+      min_purity: 0.50
+
+      # Geometry Checks (Circularity thresholds)
+      stop_min_circularity: 0.75
+      slow_min_circularity: 0.52
+      turn_min_circularity: 0.75
+
+      # HSV Ranges [H, S, V] arrays
+      red_range1_low: [0, 120, 70]
+      red_range1_high: [10, 255, 255]
+      red_range2_low: [170, 120, 70]
+      red_range2_high: [179, 255, 255]
+
+      yellow_range_low: [18, 90, 90]
+      yellow_range_high: [38, 255, 255]
+
+      blue_range_low: [100, 130, 60]
+      blue_range_high: [130, 255, 255]
