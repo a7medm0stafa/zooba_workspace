@@ -259,15 +259,15 @@ class SignDetectionNode(Node):
         self.declare_parameter('turn_heading', 20.0)
         self.declare_parameter('stop_duration', 3.0)
 
-        # ROI filter HSV ranges
-        self.declare_parameter('red_range1_low',  [0, 120, 120])
-        self.declare_parameter('red_range1_high', [10, 255, 255])
-        self.declare_parameter('red_range2_low',  [170, 120, 120])
+        # ROI filter HSV ranges (tuned values from test_gtsrb_live.py)
+        self.declare_parameter('red_range1_low',  [0, 150, 150])
+        self.declare_parameter('red_range1_high', [8, 255, 255])
+        self.declare_parameter('red_range2_low',  [172, 150, 150])
         self.declare_parameter('red_range2_high', [179, 255, 255])
-        self.declare_parameter('yellow_range_low',  [18, 100, 100])
-        self.declare_parameter('yellow_range_high', [38, 255, 255])
-        self.declare_parameter('blue_range_low',  [100, 100, 80])
-        self.declare_parameter('blue_range_high', [130, 255, 255])
+        self.declare_parameter('yellow_range_low',  [20, 150, 150])
+        self.declare_parameter('yellow_range_high', [35, 255, 255])
+        self.declare_parameter('blue_range_low',  [105, 150, 120])
+        self.declare_parameter('blue_range_high', [125, 255, 255])
 
         # ROI filter geometry
         self.declare_parameter('min_area', 1500)

@@ -47,18 +47,18 @@ perception:
 
       # ── HSV Color Ranges ──────────────────────────────────────────────────
       # Red (2 ranges to handle hue wrap-around)
-      red_range1_low:  [0, 120, 120]
-      red_range1_high: [10, 255, 255]
-      red_range2_low:  [170, 120, 120]
+      red_range1_low:  [0, 150, 150]
+      red_range1_high: [8, 255, 255]
+      red_range2_low:  [172, 150, 150]
       red_range2_high: [179, 255, 255]
 
       # Yellow
-      yellow_range_low:  [18, 100, 100]
-      yellow_range_high: [38, 255, 255]
+      yellow_range_low:  [20, 150, 150]
+      yellow_range_high: [35, 255, 255]
 
       # Blue
-      blue_range_low:  [100, 100, 80]
-      blue_range_high: [130, 255, 255]
+      blue_range_low:  [105, 150, 120]
+      blue_range_high: [125, 255, 255]
 
       # ── ROI Filter Geometry ───────────────────────────────────────────────
       min_area: 1500
