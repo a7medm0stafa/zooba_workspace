@@ -47,9 +47,10 @@ perception:
 
       # ── HSV Color Ranges ──────────────────────────────────────────────────
       # Red (2 ranges to handle hue wrap-around)
-      red_range1_low:  [0, 150, 150]
-      red_range1_high: [8, 255, 255]
-      red_range2_low:  [172, 150, 150]
+      # MUCH better for real-world
+      red_range1_low:  [0, 100, 80]
+      red_range1_high: [12, 255, 255]
+      red_range2_low:  [165, 100, 80]
       red_range2_high: [179, 255, 255]
 
       # Yellow
@@ -61,7 +62,7 @@ perception:
       blue_range_high: [125, 255, 255]
 
       # ── ROI Filter Geometry ───────────────────────────────────────────────
-      min_area: 1500
+      min_area: 1000
       max_area: 150000
       ignore_bottom_percent: 0.40    # Discard bottom 40% of frame (floor)
       min_aspect_ratio: 0.65

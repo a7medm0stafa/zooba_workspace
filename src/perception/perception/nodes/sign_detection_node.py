@@ -96,7 +96,7 @@ class ColorROIFilter:
         hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
 
         # CLAHE on V channel — normalises brightness
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(6, 6))
         h, s, v = cv2.split(hsv)
         hsv = cv2.merge([h, s, clahe.apply(v)])
 
