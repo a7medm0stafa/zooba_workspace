@@ -188,8 +188,8 @@ class SignNode(Node):
         if not ret:
             return
 
-        # IMPORTANT: only horizontal flip
-        frame = cv2.flip(frame, 1)
+        # Flip horizontally AND vertically (180 deg rotation) to fix upside-down camera
+        frame = cv2.flip(frame, -1)
 
         sign = self.detector.detect(frame)
 
