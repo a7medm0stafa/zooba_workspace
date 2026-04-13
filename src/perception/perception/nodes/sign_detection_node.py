@@ -55,16 +55,13 @@ class SignDetector:
         y_end = int(FRAME_H * self.crop_top_percentage)
         img_bgr = img[0:y_end, :]
 
-        # Boost overall brightness & contrast since camera output is dark
-        img_bgr = cv2.convertScaleAbs(img_bgr, alpha=1.2, beta=30)
-        
         t_resize = time.perf_counter()
         timings['Resize/Bright'] = t_resize - t_start
 
         hsv_raw = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
         h, s, v = cv2.split(hsv_raw)
-        # Increase V channel boost further (40 instead of 20)
-        v = np.clip(cv2.add(v, 40), 0, 255).astype(np.uint8)
+        # Increase V channel boost further (up to 60) for robust color detection in darkness
+        v = np.clip(cv2.add(v, 60), 0, 255).astype(np.uint8)
         hsv = cv2.merge((h, s, v))
 
         t_hsv = time.perf_counter()
@@ -93,7 +90,7 @@ class SignDetector:
         # Yellow Pipeline
         mask_y = cv2.inRange(hsv, *self.YELLOW_RANGE)
         clean_y = self._clean(mask_y)
-        det_y = self._process_pipeline('SLOW_DOWN', clean_y, img_bgr, 3, 6, self.slow_min_circularity, debug_shapes, debug_edges, (0, 255, 255))
+        det_y = self._process_pipeline('SLOW_DOWN', clean_y, img_bgr, 3, 8, self.slow_min_circularity, debug_shapes, debug_edges, (0, 255, 255))
         detections.extend(det_y)
 
         t_yellow = time.perf_counter()
@@ -247,7 +244,7 @@ class SignDetector:
         am = cv2.morphologyEx(cv2.morphologyEx(am, cv2.MORPH_CLOSE, k), cv2.MORPH_OPEN, k)
         
         nw, total = cv2.countNonZero(am), am.shape[0]*am.shape[1]
-        if nw < total * 0.05 or nw > total * 0.80: return None
+        if nw < total * 0.02 or nw > total * 0.80: return None
         
         contours, _ = cv2.findContours(am, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours: return None
@@ -273,7 +270,7 @@ class SignDetector:
         lm, rm = float(np.sum(m[:, :w//2])), float(np.sum(m[:, w//2:]))
         if lm+rm == 0: return None
         r = (lm-rm)/(lm+rm)
-        return 'RIGHT' if r > 0.05 else ('LEFT' if r < -0.05 else None)
+        return 'RIGHT' if r > 0.02 else ('LEFT' if r < -0.02 else None)
 
 
 # ═══════════════════════════════════════════════════════════
