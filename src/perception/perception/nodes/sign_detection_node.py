@@ -193,6 +193,8 @@ class SignNode(Node):
         if not ret:
             return
 
+        frame = cv2.flip(frame, -1)
+
         sign = self.detector.detect(frame)
 
         msg = String()
