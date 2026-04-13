@@ -364,8 +364,8 @@ class SignDetectionNode(Node):
             self.get_logger().error("Failed to capture frame from camera")
             return        
         
-        frame = cv2.flip(frame, 1)
-        #frame = cv2.flip(frame, -1)
+        #frame = cv2.flip(frame, 1)
+        frame = cv2.flip(frame, -1)
 
         proc_start = time.time()
         detections, processed, hsv, debug_masks = self.detect(frame)
