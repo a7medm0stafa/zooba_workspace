@@ -161,6 +161,13 @@ class TrafficLightDetectorNode(Node):
         # Geometry validation (strict 3-circle)
         _d('alignment_tolerance', 2.0)
 
+        # Preprocessing
+        _d('use_clahe', True)
+        _d('clahe_clip_limit', 2.0)
+
+        # Colour classification
+        _d('min_color_ratio', 0.05)
+
         # Temporal
         _d('min_confirm_frames', 3)
 
@@ -285,13 +292,6 @@ class TrafficLightDetectorNode(Node):
         # -- 6. Temporal filtering -------------------------------------
         confirmed_state = self.select_state(detected_state)
 
-        # -- Debug: state history --------------------------------------
-        recent = list(self.state_history)[-self._p('min_confirm_frames'):]
-        # self.get_logger().info(
-        #     f'[STATE] detected={detected_state}  confirmed={confirmed_state}  '
-        #     f'history(last {len(recent)})={recent}'
-        # )
-
         # -- Publish state ---------------------------------------------
         state_msg = String()
         state_msg.data = confirmed_state
@@ -300,22 +300,33 @@ class TrafficLightDetectorNode(Node):
         # -- 7. Debug image --------------------------------------------
         if self._p('show_debug_display'):
             debug_img = self._draw_debug(
-                frame, roi_offset, circles, cluster_info, confirmed_state
+                frame, roi_offset, circles, cluster_info,
+                confirmed_state, detected_state
             )
             cv2.imshow("Traffic Light Detector Debug", debug_img)
             cv2.waitKey(1)
 
-        # -- Performance log -------------------------------------------
+        # -- Clean single-line terminal debug --------------------------
         elapsed_ms = (time.time() - t_start) * 1000.0
+        radii_str = ','.join(str(r) for _, _, r in circles) if circles else '-'
+        n_clusters = sum(1 for ci in cluster_info if ci)
+        best_info = ''
+        if cluster_info:
+            top_score = 0
+            top_ratio = 0.0
+            top_intensity = 0
+            for ci_data in cluster_info:
+                for item in ci_data:
+                    if item['score'] > top_score:
+                        top_score = item['score']
+                        top_ratio = item.get('ratio', 0)
+                        top_intensity = item.get('intensity', 0)
+            best_info = (f' | best: {detected_state} '
+                         f'{top_ratio:.0%} i={top_intensity}')
         self.get_logger().info(
-            f'[PERF] [{self.mode}] State={confirmed_state} | '
-            f'{elapsed_ms:.1f} ms'
-            f'Circles={len(circles)}'
-            f'min and max radius={self._p('min_radius')} {self._p('max_radius')}'
-            f'number of canditates={len(cluster_info)}'
-            f'min_dist={self._p('min_dist')}'
-            
-
+            f'[TLD] {self.mode} | {len(circles)} circles (r={radii_str}) | '
+            f'{n_clusters} cluster(s){best_info} | '
+            f'-> {confirmed_state} | {elapsed_ms:.1f}ms'
         )
 
     # ===================================================================
@@ -324,48 +335,17 @@ class TrafficLightDetectorNode(Node):
 
     def _run_detection_pipeline(self, gray, hsv):
         """
-        Run the full pipeline: detect → filter → cluster → validate → classify.
+        Run the full pipeline: detect → filter → cluster → classify.
 
         If a valid cluster is found, switch to TRACKING mode.
 
         Returns:
             (detected_state, cluster_info, circles)
         """
-        # Steps 2–3
         circles = self.detect_circles(gray)
-
-        # -- Debug: raw circle detection --------------------------------
-        radii_raw = [r for (_, _, r) in circles]
-        self.get_logger().info(
-            f'[CIRCLES] Detected: {len(circles)}  '
-            f'Radii: {radii_raw}'
-        )
-
         circles = self.filter_circles(circles, gray)
-
-        # -- Debug: filtered circles ------------------------------------
-        radii_filt = [r for (_, _, r) in circles]
-        self.get_logger().info(
-            f'[CIRCLES] After filter: {len(circles)}  '
-            f'Radii: {radii_filt}'
-        )
-
-        # Step 4: cluster + strict geometry validation
         clusters = self.cluster_circles(circles)
-
-        # Step 5
         detected_state, cluster_info = self.classify_colors(clusters, hsv)
-
-        # -- Debug: candidate summary -----------------------------------
-        if clusters:
-            self.get_logger().info(
-                f'[CANDIDATE] DETECTED — {len(clusters)} valid cluster(s)  '
-                f'state={detected_state}'
-            )
-        else:
-            self.get_logger().info(
-                '[CANDIDATE] NONE — no valid 3-circle traffic light found'
-            )
 
         # -- Attempt to enter TRACKING mode ----------------------------
         if detected_state != 'UNKNOWN' and cluster_info:
@@ -374,7 +354,7 @@ class TrafficLightDetectorNode(Node):
                 self.tracked_bbox = self._cluster_to_bbox(best_cluster)
                 self.tracking_lost_count = 0
                 self.mode = MODE_TRACKING
-                self.get_logger().info('Locked traffic light → TRACKING.')
+                self.get_logger().info('-> TRACKING locked.')
 
         return detected_state, cluster_info, circles
 
@@ -443,13 +423,16 @@ class TrafficLightDetectorNode(Node):
         detected_state, cluster_info = self.classify_colors(clusters, hsv)
 
         # -- Update tracked bbox to new circle positions ---------------
-        if detected_state != 'UNKNOWN' and cluster_info:
+        # Hysteresis: if circles are found, always update bbox position
+        # (the housing is still there even if colour is uncertain)
+        if cluster_info:
             best = self._best_cluster(cluster_info)
             if best is not None:
                 self.tracked_bbox = self._cluster_to_bbox(best)
-                self.tracking_lost_count = 0
             else:
-                self.tracking_lost_count += 1
+                # Circles found but all UNKNOWN colour — keep position
+                self.tracked_bbox = self._cluster_to_bbox(cluster_info[0])
+            self.tracking_lost_count = 0
         else:
             self.tracking_lost_count += 1
 
@@ -530,6 +513,14 @@ class TrafficLightDetectorNode(Node):
 
         gray = cv2.cvtColor(roi_frame, cv2.COLOR_BGR2GRAY)
         hsv = cv2.cvtColor(roi_frame, cv2.COLOR_BGR2HSV)
+
+        # CLAHE: boost local contrast for dim/unlit LEDs on low-quality cameras
+        if self._p('use_clahe'):
+            clahe = cv2.createCLAHE(
+                clipLimit=self._p('clahe_clip_limit'),
+                tileGridSize=(8, 8)
+            )
+            gray = clahe.apply(gray)
 
         # Gaussian blur to reduce noise before HoughCircles
         gray = cv2.GaussianBlur(gray, (9, 9), 2)
@@ -708,13 +699,6 @@ class TrafficLightDetectorNode(Node):
         for cluster in clusters:
             cluster.sort(key=lambda c: c[1])
 
-        # -- Debug: log each cluster -----------------------------------
-        for idx, cluster in enumerate(clusters):
-            radii = [c[2] for c in cluster]
-            self.get_logger().info(
-                f'[CANDIDATE] cluster_idx={idx}  circles={len(cluster)}  '
-                f'radii={radii}'
-            )
 
         # Prefer multi-circle clusters (2–3); fall back to all
         preferred = [c for c in clusters if 2 <= len(c) <= 3]
@@ -861,8 +845,8 @@ class TrafficLightDetectorNode(Node):
                 yellow_m = cv2.inRange(roi, yl, yu)
                 green_m = cv2.inRange(roi, gl, gu)
 
-                # Pixel scores inside the circle
-                scores = {
+                # Pixel scores inside the circle (ratio-based)
+                raw_scores = {
                     'RED': int(cv2.countNonZero(
                         cv2.bitwise_and(red_m, cmask))),
                     'YELLOW': int(cv2.countNonZero(
@@ -871,23 +855,28 @@ class TrafficLightDetectorNode(Node):
                         cv2.bitwise_and(green_m, cmask))),
                 }
 
-                max_label = max(scores, key=scores.get)
-                max_score = scores[max_label]
-                if max_score == 0:
-                    max_label = 'UNKNOWN'
+                # Ratio-based scoring: normalise by total circle pixels
+                min_ratio = self._p('min_color_ratio')
+                ratios = {}
+                for colour_name, count in raw_scores.items():
+                    ratios[colour_name] = (
+                        count / pixel_count if pixel_count > 0 else 0.0
+                    )
 
-                # -- Debug: per-circle colour scores + intensity -----------
-                self.get_logger().info(
-                    f'[COLOUR] circle ({x},{y},r={r})  '
-                    f'R={scores["RED"]} Y={scores["YELLOW"]} '
-                    f'G={scores["GREEN"]}  → {max_label}  '
-                    f'intensity={mean_intensity}'
-                )
+                max_label = max(ratios, key=ratios.get)
+                max_ratio = ratios[max_label]
+                max_score = raw_scores[max_label]
+
+                # Require minimum ratio to accept a colour
+                if max_ratio < min_ratio:
+                    max_label = 'UNKNOWN'
 
                 cluster_data.append({
                     'circle': (x, y, r),
                     'label': max_label,
-                    'score': max_score
+                    'score': max_score,
+                    'intensity': mean_intensity,
+                    'ratio': max_ratio,
                 })
 
                 # Global best across all clusters
@@ -905,11 +894,11 @@ class TrafficLightDetectorNode(Node):
 
     def select_state(self, detected_state):
         """
-        Apply temporal filtering over the rolling stream history.
+        Apply temporal filtering using majority vote.
 
-        The detected state is appended to a rolling buffer.  A state is
-        confirmed only if the last *min_confirm_frames* entries are
-        identical, providing stability across stream frames.
+        A state is confirmed if it appears in >= 60% of the last
+        min_confirm_frames entries (ignoring UNKNOWN).  This is far
+        more robust than requiring all frames to agree.
 
         Args:
             detected_state: State detected in the current frame.
@@ -925,8 +914,20 @@ class TrafficLightDetectorNode(Node):
             return 'UNKNOWN'
 
         recent = list(self.state_history)[-min_frames:]
-        if all(s == recent[0] for s in recent):
-            return recent[0]
+
+        # Count non-UNKNOWN votes
+        counts = {}
+        for s in recent:
+            if s != 'UNKNOWN':
+                counts[s] = counts.get(s, 0) + 1
+
+        if not counts:
+            return 'UNKNOWN'
+
+        # Majority vote: top state must appear in >= 60% of the window
+        top_state = max(counts, key=counts.get)
+        if counts[top_state] >= min_frames * 0.6:
+            return top_state
 
         return 'UNKNOWN'
 
@@ -935,14 +936,15 @@ class TrafficLightDetectorNode(Node):
     # ===================================================================
 
     def _draw_debug(self, frame, roi_offset, circles, cluster_info,
-                    confirmed_state):
+                    confirmed_state, detected_state=''):
         """
-        Annotate the original frame with detection results.
+        Annotate the original frame with detection results and tuning info.
 
         Draws:
             - ROI boundary
-            - All filtered circles (grey)
-            - Clustered circles with colour-coded labels
+            - Info panel with current parameters for tuning
+            - All filtered circles (grey) with radius labels
+            - Clustered circles with colour, radius, and intensity
             - Cluster bounding boxes
             - Tracked search window (TRACKING mode)
             - Current mode label
@@ -961,9 +963,25 @@ class TrafficLightDetectorNode(Node):
         cv2.putText(debug, 'ROI', (5, y_start + 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1)
 
-        # All detected/filtered circles (grey outlines)
+        # -- Info panel (top-left, below ROI label) --------------------
+        panel_lines = [
+            f'r: {self._p("min_radius")}-{self._p("max_radius")}  '
+            f'p1/p2: {self._p("param1"):.0f}/{self._p("param2"):.0f}',
+            f'bright>={self._p("min_brightness")}  '
+            f'CLAHE:{"ON" if self._p("use_clahe") else "OFF"}',
+            f'Circles: {len(circles)}  Clusters: {len(cluster_info)}',
+            f'Detected: {detected_state}',
+        ]
+        panel_y = y_start + 40
+        for i, line in enumerate(panel_lines):
+            cv2.putText(debug, line, (5, panel_y + i * 18),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1)
+
+        # All detected/filtered circles (grey outlines with radius)
         for (x, y, r) in circles:
             cv2.circle(debug, (x, y), r, (180, 180, 180), 1)
+            cv2.putText(debug, f'r={r}', (x + r + 2, y),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.3, (180, 180, 180), 1)
 
         # Colour map for labels
         cmap = {
@@ -973,19 +991,21 @@ class TrafficLightDetectorNode(Node):
             'UNKNOWN': (128, 128, 128),
         }
 
-        # Clustered circles with colour-coded labels
+        # Clustered circles with colour, radius, intensity, ratio
         for ci, cluster_data in enumerate(cluster_info):
             for item in cluster_data:
                 cx, cy, cr = item['circle']
                 label = item['label']
-                score = item['score']
+                intensity = item.get('intensity', '?')
+                ratio = item.get('ratio', 0)
                 colour = cmap.get(label, (128, 128, 128))
 
                 cv2.circle(debug, (cx, cy), cr, colour, 2)
                 cv2.putText(
-                    debug, f'{label} ({score})',
+                    debug,
+                    f'{label} r={cr} i={intensity} {ratio:.0%}',
                     (cx - cr, cy - cr - 5),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, colour, 1
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.35, colour, 1
                 )
 
             # Bounding box around the cluster

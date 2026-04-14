@@ -36,6 +36,13 @@ traffic_light_detector_node:
     radius_tolerance: 0.5 # Max relative radius difference (ratio)
     alignment_tolerance: 2.0 # Max off-axis spread as multiple of avg radius
 
+    # ── Preprocessing ────────────────────────────────────────────
+    use_clahe: true # Enable CLAHE contrast enhancement (helps dim LEDs)
+    clahe_clip_limit: 2.0 # CLAHE clip limit (higher = more contrast)
+
+    # ── Colour Classification ────────────────────────────────────
+    min_color_ratio: 0.05 # Min ratio of matching pixels to accept colour (0.0-1.0)
+
     # ── Temporal Filtering ───────────────────────────────────────
     min_confirm_frames: 5 # Consecutive frames needed to confirm a state
 
