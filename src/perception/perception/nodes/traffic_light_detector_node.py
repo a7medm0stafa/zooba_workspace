@@ -310,6 +310,12 @@ class TrafficLightDetectorNode(Node):
         self.get_logger().info(
             f'[PERF] [{self.mode}] State={confirmed_state} | '
             f'{elapsed_ms:.1f} ms'
+            f'Circles={len(circles)}'
+            f'min and max radius={self._p('min_radius')} {self._p('max_radius')}'
+            f'number of canditates={len(cluster_info)}'
+            f'min_dist={self._p('min_dist')}'
+            
+
         )
 
     # ===================================================================
