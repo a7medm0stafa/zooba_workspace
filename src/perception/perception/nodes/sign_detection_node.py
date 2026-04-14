@@ -2,7 +2,7 @@
 sign_detection_node.py  (YOLOv8 TFLite version)
 ================================================
 ROS2 Traffic Sign Detection Node — uses a YOLOv8 INT8 TFLite model
-(Custom classes: NO_SIGN, SLOW_DOWN, STOP, TURN_LEFT, TURN_RIGHT).
+(Custom classes: AHEAD, SLOW, STOP, TURN_LEFT, TURN_RIGHT).
 
 Pipeline:
   1. Capture frame from Pi camera
@@ -11,10 +11,6 @@ Pipeline:
   4. Non-Maximum Suppression (NMS) → Best detection
   5. Temporal smoother → Stabilised label
   6. Map label → VehicleCmd and publish
-
-Publishes:
-  /teleop/raw_cmd           (vehicle_interfaces/VehicleCmd)
-  /perception/sign_detected (std_msgs/String)
 """
 
 import os
@@ -42,8 +38,8 @@ _DEBUG = os.environ.get("SIGN_DEBUG", "0") == "1"
 class YOLOv8Detector:
     """Runs single-stage object detection on the full frame."""
 
-    # Must match the order of classes in your Roboflow dataset/data.yaml
-    CUSTOM_CLASSES = ["SLOW_DOWN", "STOP", "TURN_LEFT", "TURN_RIGHT"]
+    # CRITICAL: Must match the EXACT spelling and order of your dataset classes
+    CUSTOM_CLASSES = ["AHEAD", "SLOW", "STOP", "TURN_LEFT", "TURN_RIGHT"]
 
     def __init__(self, model_path: str, imgsz: int, num_threads: int,
                  conf_threshold: float, iou_threshold: float, logger=None):
@@ -61,10 +57,11 @@ class YOLOv8Detector:
             )
             if logger: logger.info("[YOLO] Loaded explicit XNNPACK hardware acceleration!")
         except (ValueError, OSError) as e:
+            # Safely fallback if libXNNPACK.so isn't found
             self.interpreter = tflite.Interpreter(
                 model_path=model_path, num_threads=num_threads)
-            if logger: logger.warn(f"[YOLO] Explicit XNNPACK load failed ({e}). Running standard initialization (XNNPACK may be built-in).")
-            
+            if logger: logger.warn(f"[YOLO] Explicit XNNPACK load failed ({e}). Running standard initialization.")
+
         self.interpreter.allocate_tensors()
         self.inp = self.interpreter.get_input_details()[0]
         self.out = self.interpreter.get_output_details()[0]
@@ -79,16 +76,6 @@ class YOLOv8Detector:
         self.out_scale = float(out_quant.get("scales", [1.0])[0]) if out_quant and out_quant.get("scales") else 1.0
         self.out_zp    = int(out_quant.get("zero_points", [0])[0]) if out_quant and out_quant.get("zero_points") else 0
 
-        if logger:
-            logger.info("=" * 60)
-            logger.info(f"[YOLO] TFLite source  : {_TFLITE_SOURCE}")
-            logger.info(f"[YOLO] Model path     : {model_path}")
-            logger.info(f"[YOLO] Input  shape   : {self.inp['shape']} ({self.inp['dtype']})")
-            logger.info(f"[YOLO] Output shape   : {self.out['shape']} ({self.out['dtype']})")
-            logger.info(f"[YOLO] Conf threshold : {self.conf_threshold}")
-            logger.info(f"[YOLO] IOU threshold  : {self.iou_threshold}")
-            logger.info("=" * 60)
-
     def detect(self, frame_bgr):
         """Returns (best_label, confidence, bounding_box_xywh) relative to input frame size."""
         orig_h, orig_w = frame_bgr.shape[:2]
@@ -98,7 +85,6 @@ class YOLOv8Detector:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         if self.is_int8:
-            # Handle standard float32 to int8 quantization
             inp = np.round((img.astype(np.float32) / 255.0) / self.inp_scale + self.inp_zp).astype(np.int8)
         else:
             inp = img.astype(np.float32) / 255.0
@@ -115,15 +101,12 @@ class YOLOv8Detector:
             output = raw_output.astype(np.float32)
 
         # 4. Parse YOLOv8 Output Shape
-        # YOLOv8 outputs [4 + num_classes, num_anchors] (e.g., [8, 2100])
-        # We need to transpose it to [num_anchors, features]
         if output.shape[0] < output.shape[1]:
             output = output.T 
 
         boxes_cxcywh = output[:, :4]
         scores_matrix = output[:, 4:]
 
-        # Get highest score for each bounding box
         class_ids = np.argmax(scores_matrix, axis=1)
         confidences = np.max(scores_matrix, axis=1)
 
@@ -136,14 +119,14 @@ class YOLOv8Detector:
         if len(filtered_boxes) == 0:
             return "NO_SIGN", 0.0, None
 
-        # 6. Convert Center-X, Center-Y, W, H to X_min, Y_min, W, H for OpenCV NMS
+        # 6. Convert to OpenCV NMS format (X_min, Y_min, W, H)
         boxes_xywh = np.zeros_like(filtered_boxes)
-        boxes_xywh[:, 0] = filtered_boxes[:, 0] - (filtered_boxes[:, 2] / 2) # X_min
-        boxes_xywh[:, 1] = filtered_boxes[:, 1] - (filtered_boxes[:, 3] / 2) # Y_min
-        boxes_xywh[:, 2] = filtered_boxes[:, 2]                              # Width
-        boxes_xywh[:, 3] = filtered_boxes[:, 3]                              # Height
+        boxes_xywh[:, 0] = filtered_boxes[:, 0] - (filtered_boxes[:, 2] / 2)
+        boxes_xywh[:, 1] = filtered_boxes[:, 1] - (filtered_boxes[:, 3] / 2)
+        boxes_xywh[:, 2] = filtered_boxes[:, 2]
+        boxes_xywh[:, 3] = filtered_boxes[:, 3]
 
-        # 7. Non-Maximum Suppression (Removes overlapping boxes)
+        # 7. Non-Maximum Suppression
         indices = cv2.dnn.NMSBoxes(
             boxes_xywh.tolist(), 
             filtered_confs.tolist(), 
@@ -152,11 +135,10 @@ class YOLOv8Detector:
         )
 
         if len(indices) > 0:
-            # Get the best detection
             best_idx = indices[0]
             best_class_id = filtered_class_ids[best_idx]
             best_conf = filtered_confs[best_idx]
-            best_box = boxes_xywh[best_idx] # [x, y, w, h] in imgsz scale
+            best_box = boxes_xywh[best_idx]
 
             # 8. Scale bounding box back to original frame resolution
             scale_x = orig_w / self.imgsz
@@ -169,7 +151,6 @@ class YOLOv8Detector:
                 int(best_box[3] * scale_y)
             )
 
-            # Safety check just in case model detects something outside CUSTOM_CLASSES bounds
             if best_class_id < len(self.CUSTOM_CLASSES):
                 label = self.CUSTOM_CLASSES[best_class_id]
             else:
@@ -184,8 +165,6 @@ class YOLOv8Detector:
 # TEMPORAL SMOOTHER
 # ─────────────────────────────────────────────────────────────────────────────
 class TemporalSmoother:
-    """Requires N consecutive identical detections before committing."""
-
     def __init__(self, confirm_frames=3, clear_frames=6):
         self.confirm_frames  = confirm_frames
         self.clear_frames    = clear_frames
@@ -218,14 +197,12 @@ class SignDetectionNode(Node):
         super().__init__('sign_detection_node')
 
         # ── Declare Parameters ────────────────────────────────────────────
-        # Model (Updated for YOLO)
         self.declare_parameter('model_path', '')
-        self.declare_parameter('imgsz', 320)  # Replaces crop_size
-        self.declare_parameter('num_threads', 4) # Increased to 4 for Pi
+        self.declare_parameter('imgsz', 320)
+        self.declare_parameter('num_threads', 4)
         self.declare_parameter('confidence_threshold', 0.60)
-        self.declare_parameter('iou_threshold', 0.45) # New for YOLO NMS
+        self.declare_parameter('iou_threshold', 0.45)
 
-        # Camera
         self.declare_parameter('camera_index', 0)
         self.declare_parameter('frame_width', 320)
         self.declare_parameter('frame_height', 240)
@@ -233,15 +210,12 @@ class SignDetectionNode(Node):
         self.declare_parameter('publish_rate', 20.0)
         self.declare_parameter('show_gui', False)
 
-        # Temporal smoother
         self.declare_parameter('confirm_frames', 3)
         self.declare_parameter('clear_frames', 6)
 
-        # Topics
         self.declare_parameter('cmd_output_topic', '/teleop/raw_cmd')
         self.declare_parameter('sign_topic', '/perception/sign_detected')
 
-        # Velocity / heading mappings
         self.declare_parameter('cruise_velocity', 0.5)
         self.declare_parameter('slow_velocity', 0.3)
         self.declare_parameter('stop_velocity', 0.0)
@@ -295,7 +269,6 @@ class SignDetectionNode(Node):
         self.smoother = TemporalSmoother(confirm_frames, clear_frames)
 
         # ── Camera ────────────────────────────────────────────────────────────
-        self.get_logger().info(f"[INIT] Opening camera index={camera_index} via V4L2")
         self.cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,  self.frame_w)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_h)
@@ -310,13 +283,11 @@ class SignDetectionNode(Node):
         self.cmd_pub  = self.create_publisher(VehicleCmd, cmd_topic, 10)
         self.sign_pub = self.create_publisher(String, sign_topic, 10)
 
-        # ── State ─────────────────────────────────────────────────────────────
         self.frame_count    = 0
         self.stop_start_time = None
         self.fps            = 0.0
         self.fps_timer      = time.time()
 
-        # ── Timer loop ────────────────────────────────────────────────────────
         self.timer = self.create_timer(1.0 / publish_rate, self._loop)
         self.get_logger().info('Sign Detection Node (YOLOv8 TFLite) READY')
 
@@ -329,24 +300,22 @@ class SignDetectionNode(Node):
             frame = cv2.flip(frame, -1)
 
         self.frame_count += 1
-
-        # FPS counter
         if self.frame_count % 30 == 0:
             self.fps = 30.0 / max(time.time() - self.fps_timer, 1e-6)
             self.fps_timer = time.time()
 
-        # ── 1. Detect Sign (Replaces ROI + Classification) ────────────────────
+        # 1. Detect Sign
         label, conf, box = self.detector.detect(frame)
 
-        # ── 2. Temporal smoothing ─────────────────────────────────────────────
+        # 2. Temporal smoothing
         stable = self.smoother.update(label)
 
-        # ── 3. Publish sign label ─────────────────────────────────────────────
+        # 3. Publish sign label
         sign_msg = String()
         sign_msg.data = stable
         self.sign_pub.publish(sign_msg)
 
-        # ── 4. Map sign → VehicleCmd and publish ──────────────────────────────
+        # 4. Map sign → VehicleCmd
         cmd_msg = VehicleCmd()
         cmd_msg.header.stamp = self.get_clock().now().to_msg()
         cmd_msg.header.frame_id = 'base_link'
@@ -363,7 +332,12 @@ class SignDetectionNode(Node):
                 self.smoother.stable = "NO_SIGN"
                 self.stop_start_time = None
 
-        elif stable == "SLOW_DOWN":
+        elif stable == "AHEAD":
+            self.stop_start_time = None
+            cmd_msg.velocity = self.cruise_vel  # Or self.slow_vel if you prefer
+            cmd_msg.heading  = 0.0
+
+        elif stable == "SLOW":
             self.stop_start_time = None
             cmd_msg.velocity = self.slow_vel
             cmd_msg.heading  = 0.0
@@ -378,33 +352,46 @@ class SignDetectionNode(Node):
             cmd_msg.velocity = self.turn_vel
             cmd_msg.heading  = self.turn_hdg
 
-        else:  # NO_SIGN → cruise
+        else:  # NO_SIGN
             self.stop_start_time = None
             cmd_msg.velocity = self.cruise_vel
             cmd_msg.heading  = 0.0
 
         self.cmd_pub.publish(cmd_msg)
 
-        # ── 5. Optional GUI ───────────────────────────────────────────────────
+        # ── 5. Bounding Box & GUI Display ─────────────────────────────────────
         if self.show_gui:
             display = frame.copy()
-            if box:
+            
+            # Draw Bounding Box around the sign
+            if box is not None:
                 x, y, bw, bh = box
-                clr = (0, 255, 0) if stable != "NO_SIGN" else (0, 0, 255)
-                # Ensure box constraints
+                
+                # Keep coordinates inside the frame boundaries so OpenCV doesn't crash
                 x, y = max(0, x), max(0, y)
-                cv2.rectangle(display, (x, y), (x + bw, y + bh), clr, 2)
-                cv2.putText(display, f"{label} {conf:.2f}", (x, y - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, clr, 2)
+                
+                # Color code: Green if stable, Orange if it's a raw (flickering) detection
+                clr = (0, 255, 0) if stable != "NO_SIGN" else (0, 165, 255)
+                
+                # Draw the actual rectangle (Thickness = 3)
+                cv2.rectangle(display, (x, y), (x + bw, y + bh), clr, 3)
+                
+                # Write the Label and Confidence score just above the box
+                text_y = max(15, y - 10) # Prevent text from going off the top of screen
+                cv2.putText(display, f"{label} {conf:.2f}", (x, text_y),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, clr, 2)
 
+            # Draw Global Info in the top left/right corners
             cv2.putText(display, f"Stable: {stable}", (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
             cv2.putText(display, f"FPS: {self.fps:.1f}", (self.frame_w - 100, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+            
+            # Show the window
             cv2.imshow("YOLO Sign Detection", display)
             cv2.waitKey(1)
+        # ──────────────────────────────────────────────────────────────────────
 
-        # ── Periodic log ──────────────────────────────────────────────────────
         if self.frame_count % 60 == 0:
             self.get_logger().info(
                 f"[STATUS] fps={self.fps:.1f} | raw={label}({conf:.2f}) "
