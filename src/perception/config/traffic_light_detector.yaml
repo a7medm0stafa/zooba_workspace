@@ -31,6 +31,7 @@ traffic_light_detector_node:
     # ── Clustering ───────────────────────────────────────────────
     max_circle_distance: 70.0 # Max center-to-center distance to cluster (px)
     radius_tolerance: 0.5 # Max relative radius difference (ratio)
+    alignment_tolerance: 2.0 # Max off-axis spread as multiple of avg radius
 
     # ── Temporal Filtering ───────────────────────────────────────
     min_confirm_frames: 10 # Consecutive frames needed to confirm a state

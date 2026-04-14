@@ -118,6 +118,10 @@ class TrafficLightDetectorNode(Node):
         Values are loaded from config/traffic_light_detector.yaml
         (installed alongside the package).  If the YAML file is not
         found, hard-coded fallback defaults are used instead.
+
+        A local override file (traffic_light_detector.local.yaml) is
+        checked first — this file is gitignored so it can be edited
+        freely on any machine without rebuild or git conflicts.
         """
         # Load YAML defaults
         yaml_params = self._load_yaml_params()
@@ -154,6 +158,9 @@ class TrafficLightDetectorNode(Node):
         _d('max_circle_distance', 80.0)
         _d('radius_tolerance', 0.5)
 
+        # Geometry validation (strict 3-circle)
+        _d('alignment_tolerance', 2.0)
+
         # Temporal
         _d('min_confirm_frames', 3)
 
@@ -166,11 +173,46 @@ class TrafficLightDetectorNode(Node):
         _d('show_debug_display', True)
 
     def _load_yaml_params(self) -> dict:
-        """Load parameter values from the installed YAML config file.
+        """Load parameter values from a YAML config file.
+
+        Resolution order:
+            1. Local override:  <workspace>/src/perception/config/
+               traffic_light_detector.local.yaml  (gitignored, no rebuild)
+            2. Installed share: <install>/share/perception/config/
+               traffic_light_detector.yaml  (requires rebuild)
 
         Returns:
             A flat dict of parameter_name → value, or empty dict on failure.
         """
+        # --- 1. Try local override (no rebuild, gitignored) ---------------
+        try:
+            # Walk up from this source file to find the workspace config dir
+            this_file = os.path.abspath(__file__)
+            # .../src/perception/perception/nodes/traffic_light_detector_node.py
+            pkg_src_dir = os.path.dirname(  # nodes/
+                os.path.dirname(             # perception/
+                    os.path.dirname(this_file)))  # perception/ (package root)
+            local_yaml = os.path.join(
+                pkg_src_dir, 'config', 'traffic_light_detector.local.yaml'
+            )
+            if os.path.isfile(local_yaml):
+                with open(local_yaml, 'r') as f:
+                    raw = yaml.safe_load(f)
+                params = (
+                    raw
+                    .get('traffic_light_detector_node', {})
+                    .get('ros__parameters', {})
+                )
+                self.get_logger().info(
+                    f'Loaded LOCAL override config from {local_yaml}'
+                )
+                return params
+        except Exception as e:
+            self.get_logger().warn(
+                f'Error reading local override config: {e}'
+            )
+
+        # --- 2. Fallback: installed share directory -----------------------
         try:
             share_dir = get_package_share_directory('perception')
             yaml_path = os.path.join(
@@ -243,6 +285,13 @@ class TrafficLightDetectorNode(Node):
         # -- 6. Temporal filtering -------------------------------------
         confirmed_state = self.select_state(detected_state)
 
+        # -- Debug: state history --------------------------------------
+        recent = list(self.state_history)[-self._p('min_confirm_frames'):]
+        self.get_logger().info(
+            f'[STATE] detected={detected_state}  confirmed={confirmed_state}  '
+            f'history(last {len(recent)})={recent}'
+        )
+
         # -- Publish state ---------------------------------------------
         state_msg = String()
         state_msg.data = confirmed_state
@@ -259,7 +308,7 @@ class TrafficLightDetectorNode(Node):
         # -- Performance log -------------------------------------------
         elapsed_ms = (time.time() - t_start) * 1000.0
         self.get_logger().info(
-            f'[{self.mode}] State={confirmed_state} | '
+            f'[PERF] [{self.mode}] State={confirmed_state} | '
             f'{elapsed_ms:.1f} ms'
         )
 
@@ -269,7 +318,7 @@ class TrafficLightDetectorNode(Node):
 
     def _run_detection_pipeline(self, gray, hsv):
         """
-        Run the full pipeline: detect → filter → cluster → classify.
+        Run the full pipeline: detect → filter → cluster → validate → classify.
 
         If a valid cluster is found, switch to TRACKING mode.
 
@@ -278,13 +327,39 @@ class TrafficLightDetectorNode(Node):
         """
         # Steps 2–3
         circles = self.detect_circles(gray)
+
+        # -- Debug: raw circle detection --------------------------------
+        radii_raw = [r for (_, _, r) in circles]
+        self.get_logger().info(
+            f'[CIRCLES] Detected: {len(circles)}  '
+            f'Radii: {radii_raw}'
+        )
+
         circles = self.filter_circles(circles, gray)
 
-        # Step 4
+        # -- Debug: filtered circles ------------------------------------
+        radii_filt = [r for (_, _, r) in circles]
+        self.get_logger().info(
+            f'[CIRCLES] After filter: {len(circles)}  '
+            f'Radii: {radii_filt}'
+        )
+
+        # Step 4: cluster + strict geometry validation
         clusters = self.cluster_circles(circles)
 
         # Step 5
         detected_state, cluster_info = self.classify_colors(clusters, hsv)
+
+        # -- Debug: candidate summary -----------------------------------
+        if clusters:
+            self.get_logger().info(
+                f'[CANDIDATE] DETECTED — {len(clusters)} valid cluster(s)  '
+                f'state={detected_state}'
+            )
+        else:
+            self.get_logger().info(
+                '[CANDIDATE] NONE — no valid 3-circle traffic light found'
+            )
 
         # -- Attempt to enter TRACKING mode ----------------------------
         if detected_state != 'UNKNOWN' and cluster_info:
@@ -564,15 +639,15 @@ class TrafficLightDetectorNode(Node):
     def cluster_circles(self, circles):
         """
         Group circles into clusters that likely belong to the same traffic
-        light housing.
+        light housing, then validate geometry.
 
         Uses complete-linkage: every circle in a cluster must be within
         max_circle_distance of every other circle, and radii must be
         similar.  Clusters are sorted top-to-bottom for vertical
         alignment.
 
-        Clusters of 2–3 circles are preferred (typical traffic light).
-        Singletons are kept as a fallback.
+        Only clusters of exactly 3 circles in a valid vertical or
+        horizontal arrangement are accepted (strict traffic light rule).
 
         Skipped entirely in TRACKING mode.
 
@@ -580,7 +655,7 @@ class TrafficLightDetectorNode(Node):
             circles: List of (x, y, r).
 
         Returns:
-            List of clusters, each cluster a list of (x, y, r).
+            List of valid clusters, each cluster a list of (x, y, r).
         """
         if not circles:
             return []
@@ -590,7 +665,7 @@ class TrafficLightDetectorNode(Node):
 
         n = len(circles)
         visited = [False] * n
-        clusters = []
+        raw_clusters = []
 
         for i in range(n):
             if visited[i]:
@@ -621,15 +696,86 @@ class TrafficLightDetectorNode(Node):
                     cluster.append(circles[j])
                     visited[j] = True
 
-            clusters.append(cluster)
+            raw_clusters.append(cluster)
 
         # Sort circles within each cluster by y-coordinate (top → bottom)
-        for cluster in clusters:
+        for cluster in raw_clusters:
             cluster.sort(key=lambda c: c[1])
 
-        # Prefer multi-circle clusters (2–3); fall back to all
-        preferred = [c for c in clusters if 2 <= len(c) <= 3]
-        return preferred if preferred else clusters
+        # -- Strict 3-circle geometry validation -----------------------
+        valid_clusters = []
+        for idx, cluster in enumerate(raw_clusters):
+            arrangement = self._validate_traffic_light_geometry(cluster)
+            if arrangement is not None:
+                valid_clusters.append(cluster)
+                self.get_logger().info(
+                    f'[CANDIDATE] cluster_idx={idx}  circles={len(cluster)}  '
+                    f'arrangement={arrangement}  valid=YES'
+                )
+            else:
+                reason = 'not 3 circles' if len(cluster) != 3 else 'bad alignment'
+                self.get_logger().info(
+                    f'[CANDIDATE] cluster_idx={idx}  circles={len(cluster)}  '
+                    f'arrangement=INVALID({reason})  valid=NO'
+                )
+
+        return valid_clusters
+
+    # ===================================================================
+    # 4b. Geometry validation (strict 3-circle arrangement)
+    # ===================================================================
+
+    def _validate_traffic_light_geometry(self, cluster):
+        """Validate that a cluster forms a plausible traffic light.
+
+        Requirements:
+            - Exactly 3 circles.
+            - Arranged vertically (preferred) or horizontally.
+              Vertical: similar X-coords, roughly equal Y-spacing.
+              Horizontal: similar Y-coords, roughly equal X-spacing.
+
+        Args:
+            cluster: List of (x, y, r) tuples.
+
+        Returns:
+            'VERTICAL' or 'HORIZONTAL' if valid, None otherwise.
+        """
+        if len(cluster) != 3:
+            return None
+
+        align_tol = self._p('alignment_tolerance')
+
+        xs = [c[0] for c in cluster]
+        ys = [c[1] for c in cluster]
+        rs = [c[2] for c in cluster]
+        avg_r = sum(rs) / 3.0
+        max_axis_spread = align_tol * avg_r  # how far off-axis is OK
+
+        # --- Check VERTICAL arrangement (preferred) -------------------
+        # Sort by Y, check X-alignment and Y-spacing
+        sorted_by_y = sorted(cluster, key=lambda c: c[1])
+        x_spread = max(c[0] for c in sorted_by_y) - min(c[0] for c in sorted_by_y)
+        if x_spread <= max_axis_spread:
+            # Check roughly equal Y-spacing
+            gap1 = sorted_by_y[1][1] - sorted_by_y[0][1]
+            gap2 = sorted_by_y[2][1] - sorted_by_y[1][1]
+            if gap1 > 0 and gap2 > 0:
+                spacing_ratio = min(gap1, gap2) / max(gap1, gap2)
+                if spacing_ratio >= 0.5:  # gaps within 50% of each other
+                    return 'VERTICAL'
+
+        # --- Check HORIZONTAL arrangement -----------------------------
+        sorted_by_x = sorted(cluster, key=lambda c: c[0])
+        y_spread = max(c[1] for c in sorted_by_x) - min(c[1] for c in sorted_by_x)
+        if y_spread <= max_axis_spread:
+            gap1 = sorted_by_x[1][0] - sorted_by_x[0][0]
+            gap2 = sorted_by_x[2][0] - sorted_by_x[1][0]
+            if gap1 > 0 and gap2 > 0:
+                spacing_ratio = min(gap1, gap2) / max(gap1, gap2)
+                if spacing_ratio >= 0.5:
+                    return 'HORIZONTAL'
+
+        return None
 
     # ===================================================================
     # 5. Colour classification + active light selection
@@ -699,6 +845,15 @@ class TrafficLightDetectorNode(Node):
                 cmask = np.zeros((roi_h, roi_w), dtype=np.uint8)
                 cv2.circle(cmask, (x - x1, y - y1), r, 255, -1)
 
+                # Compute mean intensity (V channel) inside the circle
+                v_channel = roi[:, :, 2]  # HSV V = brightness
+                masked_v = cv2.bitwise_and(v_channel, v_channel, mask=cmask)
+                pixel_count = cv2.countNonZero(cmask)
+                mean_intensity = (
+                    int(np.sum(masked_v) / pixel_count) if pixel_count > 0
+                    else 0
+                )
+
                 # Colour masks
                 red_m = cv2.bitwise_or(
                     cv2.inRange(roi, rl1, ru1),
@@ -721,6 +876,14 @@ class TrafficLightDetectorNode(Node):
                 max_score = scores[max_label]
                 if max_score == 0:
                     max_label = 'UNKNOWN'
+
+                # -- Debug: per-circle colour scores + intensity -----------
+                self.get_logger().info(
+                    f'[COLOUR] circle ({x},{y},r={r})  '
+                    f'R={scores["RED"]} Y={scores["YELLOW"]} '
+                    f'G={scores["GREEN"]}  → {max_label}  '
+                    f'intensity={mean_intensity}'
+                )
 
                 cluster_data.append({
                     'circle': (x, y, r),
