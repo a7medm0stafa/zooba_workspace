@@ -287,10 +287,10 @@ class TrafficLightDetectorNode(Node):
 
         # -- Debug: state history --------------------------------------
         recent = list(self.state_history)[-self._p('min_confirm_frames'):]
-        self.get_logger().info(
-            f'[STATE] detected={detected_state}  confirmed={confirmed_state}  '
-            f'history(last {len(recent)})={recent}'
-        )
+        # self.get_logger().info(
+        #     f'[STATE] detected={detected_state}  confirmed={confirmed_state}  '
+        #     f'history(last {len(recent)})={recent}'
+        # )
 
         # -- Publish state ---------------------------------------------
         state_msg = String()
