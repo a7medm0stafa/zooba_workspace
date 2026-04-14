@@ -3,10 +3,10 @@ traffic_light_detector_node:
     # ── Circle Detection (HoughCircles) ──────────────────────────
     dp: 1.2 # Inverse accumulator resolution ratio (Higher = Much faster, less precise)
     min_dist: 20.0 # Min distance between circle centers (px)
-    param1: 100.0 # Canny threshold (Increased to ignore weak texture/noise)
-    param2: 25.0 # Accumulator threshold (Increased to demand more perfect circles)
-    min_radius: 5 # Min circle radius (px)
-    max_radius: 80 # Max circle radius (px)
+    param1: 150.0 # Canny threshold (Increased to ignore weak texture/noise)
+    param2: 40.0 # Accumulator threshold (Increased to demand more perfect circles)
+    min_radius: 10 # Min circle radius (px)
+    max_radius: 50 # Max circle radius (px)
 
     # ── ROI ──────────────────────────────────────────────────────
     roi_height_ratio: 0.8 # Fraction of image height from top
