@@ -12,21 +12,24 @@ traffic_light_detector_node:
     roi_height_ratio: 0.8 # Fraction of image height from top
 
     # ── Filtering ────────────────────────────────────────────────
-    min_brightness: 30 # Weak brightness floor (rejects very dark noise only)
+    min_brightness: 10 # Weak brightness floor (rejects very dark noise only)
 
     # ── Color Thresholds (HSV) ───────────────────────────────────
     # Red range 1 (low hue)
-    red_lower1: [0, 100, 80]
+    red_lower1: [0, 60, 40]
     red_upper1: [10, 255, 255]
+
     # Red range 2 (high hue wrap-around)
-    red_lower2: [160, 100, 80]
+    red_lower2: [160, 60, 40]
     red_upper2: [179, 255, 255]
+
     # Yellow
-    yellow_lower: [15, 100, 80]
-    yellow_upper: [35, 255, 255]
+    yellow_lower: [12, 60, 40]
+    yellow_upper: [40, 255, 255]
+
     # Green
-    green_lower: [35, 80, 80]
-    green_upper: [90, 255, 255]
+    green_lower: [30, 50, 40]
+    green_upper: [100, 255, 255]
 
     # ── Clustering ───────────────────────────────────────────────
     max_circle_distance: 80.0 # Max center-to-center distance to cluster (px)
