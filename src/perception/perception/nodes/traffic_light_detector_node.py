@@ -639,15 +639,15 @@ class TrafficLightDetectorNode(Node):
     def cluster_circles(self, circles):
         """
         Group circles into clusters that likely belong to the same traffic
-        light housing, then validate geometry.
+        light housing.
 
         Uses complete-linkage: every circle in a cluster must be within
         max_circle_distance of every other circle, and radii must be
         similar.  Clusters are sorted top-to-bottom for vertical
         alignment.
 
-        Only clusters of exactly 3 circles in a valid vertical or
-        horizontal arrangement are accepted (strict traffic light rule).
+        Clusters of 2–3 circles are preferred (typical traffic light).
+        Singletons are kept as a fallback.
 
         Skipped entirely in TRACKING mode.
 
@@ -655,7 +655,7 @@ class TrafficLightDetectorNode(Node):
             circles: List of (x, y, r).
 
         Returns:
-            List of valid clusters, each cluster a list of (x, y, r).
+            List of clusters, each cluster a list of (x, y, r).
         """
         if not circles:
             return []
@@ -665,7 +665,7 @@ class TrafficLightDetectorNode(Node):
 
         n = len(circles)
         visited = [False] * n
-        raw_clusters = []
+        clusters = []
 
         for i in range(n):
             if visited[i]:
@@ -696,30 +696,23 @@ class TrafficLightDetectorNode(Node):
                     cluster.append(circles[j])
                     visited[j] = True
 
-            raw_clusters.append(cluster)
+            clusters.append(cluster)
 
         # Sort circles within each cluster by y-coordinate (top → bottom)
-        for cluster in raw_clusters:
+        for cluster in clusters:
             cluster.sort(key=lambda c: c[1])
 
-        # -- Strict 3-circle geometry validation -----------------------
-        valid_clusters = []
-        for idx, cluster in enumerate(raw_clusters):
-            arrangement = self._validate_traffic_light_geometry(cluster)
-            if arrangement is not None:
-                valid_clusters.append(cluster)
-                self.get_logger().info(
-                    f'[CANDIDATE] cluster_idx={idx}  circles={len(cluster)}  '
-                    f'arrangement={arrangement}  valid=YES'
-                )
-            else:
-                reason = 'not 3 circles' if len(cluster) != 3 else 'bad alignment'
-                self.get_logger().info(
-                    f'[CANDIDATE] cluster_idx={idx}  circles={len(cluster)}  '
-                    f'arrangement=INVALID({reason})  valid=NO'
-                )
+        # -- Debug: log each cluster -----------------------------------
+        for idx, cluster in enumerate(clusters):
+            radii = [c[2] for c in cluster]
+            self.get_logger().info(
+                f'[CANDIDATE] cluster_idx={idx}  circles={len(cluster)}  '
+                f'radii={radii}'
+            )
 
-        return valid_clusters
+        # Prefer multi-circle clusters (2–3); fall back to all
+        preferred = [c for c in clusters if 2 <= len(c) <= 3]
+        return preferred if preferred else clusters
 
     # ===================================================================
     # 4b. Geometry validation (strict 3-circle arrangement)
