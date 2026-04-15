@@ -176,7 +176,7 @@ class SignDetectionNode(Node):
                 if area > self.min_area:
                     peri = cv2.arcLength(cnt, True)
                     circ = (4 * np.pi * area) / (peri**2) if peri > 0 else 0
-                    approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
+                    approx = cv2.approxPolyDP(cnt, 0.03 * peri, True)
                     verts = len(approx)
                     M = cv2.moments(cnt)
                     if M["m00"] != 0:
