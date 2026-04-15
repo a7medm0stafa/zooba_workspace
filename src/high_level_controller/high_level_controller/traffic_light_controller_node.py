@@ -1,24 +1,18 @@
 """
-Traffic Light Controller Node (High-Level Controller)
+High-Level Controller Node
 =====================================================
-Subscribes to traffic light state from perception and issues autonomous
-driving commands to the mid-level controller.
+Subscribes to traffic light and traffic sign states from perception 
+and issues autonomous driving commands to the mid-level controller.
 
-Decision logic:
-    RED     → stop       (velocity = 0.0 m/s)
-    YELLOW  → slow down  (velocity = slow_velocity)
-    GREEN   → cruise     (velocity = cruise_velocity)
-    UNKNOWN → slow down  (velocity = slow_velocity, cautious default)
+Velocity Decision logic (Most Restrictive Wins):
+    RED or STOP                     → stop       (0.0 m/s)
+    YELLOW/UNKNOWN or SLOW/TURN     → slow down  (slow_velocity)
+    GREEN + NO_SIGNAL               → cruise     (cruise_velocity)
 
-The node publishes VehicleCmd on /teleop/raw_cmd — the same topic the
-teleop nodes use — so it slots in transparently as the command source
-for the nonholonomic constraints node.
-
-Subscribes:
-    /traffic_light/state  (std_msgs/String)
-
-Publishes:
-    /teleop/raw_cmd       (vehicle_interfaces/VehicleCmd)
+Heading Decision logic:
+    TURN_LEFT                       → steer left  (+turn_heading)
+    TURN_RIGHT                      → steer right (-turn_heading)
+    NO_SIGNAL / Other               → straight    (default heading)
 """
 
 import os
@@ -33,11 +27,7 @@ from ament_index_python.packages import get_package_share_directory
 
 
 class TrafficLightControllerNode(Node):
-    """High-level controller that reacts to traffic light perception."""
-
-    # ===================================================================
-    # Initialisation
-    # ===================================================================
+    """High-level controller that reacts to traffic lights and signs."""
 
     def __init__(self):
         super().__init__('traffic_light_controller_node')
@@ -49,23 +39,31 @@ class TrafficLightControllerNode(Node):
         self.cruise_velocity = self._p('cruise_velocity')
         self.slow_velocity = self._p('slow_velocity')
         self.heading = self._p('heading')
+        self.turn_heading = self._p('turn_heading')
         self.unknown_timeout = self._p('unknown_timeout')
+        
         state_topic = self._p('state_topic')
+        sign_topic = self._p('sign_topic')
         output_topic = self._p('output_topic')
         publish_rate = self._p('publish_rate')
 
-        # -- State -----------------------------------------------------
+        # -- State tracking --------------------------------------------
         self.current_light_state = 'UNKNOWN'
-        self.last_state_time = time.time()
-        self.target_velocity = 0.0       # What decision logic wants
-        self.current_velocity = 0.0      # Smoothed output
+        self.last_light_time = time.time()
+        
+        self.current_sign_state = 'NO_SIGNAL'
+        self.last_sign_time = time.time()
+        
+        self.target_velocity = 0.0       
+        self.current_velocity = 0.0      
+        self.target_heading = self.heading
 
-        # -- Subscriber: traffic light state ---------------------------
+        # -- Subscribers -----------------------------------------------
         self.state_sub = self.create_subscription(
-            String,
-            state_topic,
-            self._state_callback,
-            10
+            String, state_topic, self._light_callback, 10
+        )
+        self.sign_sub = self.create_subscription(
+            String, sign_topic, self._sign_callback, 10
         )
 
         # -- Publisher: vehicle command ---------------------------------
@@ -77,52 +75,32 @@ class TrafficLightControllerNode(Node):
 
         # -- Startup log -----------------------------------------------
         self.get_logger().info('=' * 58)
-        self.get_logger().info('Traffic Light Controller Node Started')
-        self.get_logger().info(f'  State topic     : {state_topic}')
+        self.get_logger().info('High-Level Controller Node Started')
+        self.get_logger().info(f'  Light topic     : {state_topic}')
+        self.get_logger().info(f'  Sign topic      : {sign_topic}')
         self.get_logger().info(f'  Output topic    : {output_topic}')
         self.get_logger().info(f'  Cruise velocity : {self.cruise_velocity:.2f} m/s')
         self.get_logger().info(f'  Slow velocity   : {self.slow_velocity:.2f} m/s')
-        self.get_logger().info(f'  Heading         : {self.heading:.1f}°')
-        self.get_logger().info(f'  Publish rate    : {publish_rate:.0f} Hz')
-        self.get_logger().info(f'  Unknown timeout : {self.unknown_timeout:.1f} s')
+        self.get_logger().info(f'  Turn heading    : +/- {self.turn_heading:.1f}°')
         self.get_logger().info('=' * 58)
 
-    # ===================================================================
-    # Parameter declaration
-    # ===================================================================
-
     def _declare_parameters(self):
-        """Declare all configurable ROS2 parameters.
-
-        Values are loaded from config/high_level_controller.yaml when
-        available, with hard-coded fallback defaults.
-        """
         yaml_params = self._load_yaml_params()
 
         def _d(name, fallback):
             self.declare_parameter(name, yaml_params.get(name, fallback))
 
-        _d('cruise_velocity', 0.6)        # m/s — speed on GREEN
-        _d('slow_velocity', 0.3)          # m/s — speed on YELLOW / UNKNOWN
-        _d('heading', 0.0)                # degrees — fixed straight ahead
-        _d('publish_rate', 20.0)          # Hz
+        _d('cruise_velocity', 0.6)        
+        _d('slow_velocity', 0.3)          
+        _d('heading', 0.0)                
+        _d('turn_heading', 30.0)          # degrees for left/right turns
+        _d('publish_rate', 20.0)          
         _d('state_topic', '/traffic_light/state')
+        _d('sign_topic', '/sign/command')
         _d('output_topic', '/teleop/raw_cmd')
-        _d('unknown_timeout', 2.0)        # seconds before treating silence as UNKNOWN
+        _d('unknown_timeout', 2.0)        
 
     def _load_yaml_params(self) -> dict:
-        """Load parameter values from config YAML.
-
-        Resolution order:
-            1. Local override: <workspace>/src/high_level_controller/config/
-               high_level_controller.local.yaml  (gitignored, no rebuild)
-            2. Installed share: <install>/share/high_level_controller/config/
-               high_level_controller.yaml  (requires rebuild)
-
-        Returns:
-            Flat dict of parameter_name → value, or empty dict on failure.
-        """
-        # --- 1. Try local override (no rebuild, gitignored) ---------------
         try:
             this_file = os.path.abspath(__file__)
             pkg_src_dir = os.path.dirname(os.path.dirname(this_file))
@@ -132,89 +110,79 @@ class TrafficLightControllerNode(Node):
             if os.path.isfile(local_yaml):
                 with open(local_yaml, 'r') as f:
                     raw = yaml.safe_load(f)
-                params = (
-                    raw
-                    .get('traffic_light_controller_node', {})
-                    .get('ros__parameters', {})
-                )
-                self.get_logger().info(
-                    f'Loaded LOCAL override config from {local_yaml}'
-                )
-                return params
-        except Exception as e:
-            self.get_logger().warn(
-                f'Error reading local override config: {e}'
-            )
+                return raw.get('traffic_light_controller_node', {}).get('ros__parameters', {})
+        except Exception:
+            pass
 
-        # --- 2. Fallback: installed share directory -----------------------
         try:
             share_dir = get_package_share_directory('high_level_controller')
-            yaml_path = os.path.join(
-                share_dir, 'config', 'high_level_controller.yaml'
-            )
+            yaml_path = os.path.join(share_dir, 'config', 'high_level_controller.yaml')
             with open(yaml_path, 'r') as f:
                 raw = yaml.safe_load(f)
-            params = (
-                raw
-                .get('traffic_light_controller_node', {})
-                .get('ros__parameters', {})
-            )
-            self.get_logger().info(f'Loaded parameters from {yaml_path}')
-            return params
-        except Exception as e:
-            self.get_logger().warn(
-                f'Could not load YAML config, using defaults: {e}'
-            )
+            return raw.get('traffic_light_controller_node', {}).get('ros__parameters', {})
+        except Exception:
             return {}
 
-    # ===================================================================
-    # Convenience
-    # ===================================================================
-
     def _p(self, name):
-        """Shorthand to retrieve a parameter value."""
         return self.get_parameter(name).value
 
     # ===================================================================
-    # Subscriber callback
+    # Callbacks
     # ===================================================================
 
-    def _state_callback(self, msg: String):
-        """Handle incoming traffic light state from perception."""
+    def _light_callback(self, msg: String):
         state = msg.data.strip().upper()
         if state not in ('RED', 'YELLOW', 'GREEN', 'UNKNOWN'):
-            self.get_logger().warn(f'Unexpected traffic light state: {state}')
             state = 'UNKNOWN'
-
         self.current_light_state = state
-        self.last_state_time = time.time()
+        self.last_light_time = time.time()
+
+    def _sign_callback(self, msg: String):
+        state = msg.data.strip().upper()
+        valid_signs = ('STOP', 'SLOW_DOWN', 'TURN_LEFT', 'TURN_RIGHT', 'NO_SIGNAL')
+        if state not in valid_signs:
+            state = 'NO_SIGNAL'
+        self.current_sign_state = state
+        self.last_sign_time = time.time()
 
     # ===================================================================
-    # Timer callback — decision + publish
+    # Decision Logic
     # ===================================================================
 
     def _timer_callback(self):
-        """Decide velocity based on traffic light state and publish cmd."""
         now = time.time()
 
-        # -- If no state received for too long, treat as UNKNOWN ----------
-        if (now - self.last_state_time) > self.unknown_timeout:
-            effective_state = 'UNKNOWN'
+        # 1. Handle Timeouts (if perception nodes crash/freeze)
+        if (now - self.last_light_time) > self.unknown_timeout:
+            eff_light = 'UNKNOWN'
         else:
-            effective_state = self.current_light_state
+            eff_light = self.current_light_state
 
-        # -- Decision logic -----------------------------------------------
-        if effective_state == 'RED':
+        if (now - self.last_sign_time) > self.unknown_timeout:
+            eff_sign = 'NO_SIGNAL'
+        else:
+            eff_sign = self.current_sign_state
+
+        # 2. Velocity Logic (Most Restrictive Wins)
+        if eff_light == 'RED' or eff_sign == 'STOP':
             self.target_velocity = 0.0
-        elif effective_state == 'YELLOW':
+        elif eff_light in ('YELLOW', 'UNKNOWN') or eff_sign in ('SLOW_DOWN', 'TURN_LEFT', 'TURN_RIGHT'):
+            # It's safer to slow down while turning
             self.target_velocity = self.slow_velocity
-        elif effective_state == 'GREEN':
+        elif eff_light == 'GREEN':
             self.target_velocity = self.cruise_velocity
-        else:  # UNKNOWN
-            self.target_velocity = self.slow_velocity
+        else:
+            self.target_velocity = 0.0 # Fail-safe
 
-        # -- Smooth velocity transition -----------------------------------
-        # Ramp towards target at ~1.0 m/s² (configurable via timer rate)
+        # 3. Heading Logic (ROS Standard: + is Left, - is Right)
+        if eff_sign == 'TURN_LEFT':
+            self.target_heading = self.turn_heading
+        elif eff_sign == 'TURN_RIGHT':
+            self.target_heading = -self.turn_heading
+        else:
+            self.target_heading = self.heading # Straight
+
+        # 4. Smooth velocity transition (Ramp)
         ramp_rate = 1.0  # m/s per second
         dt = 1.0 / self._p('publish_rate')
         max_change = ramp_rate * dt
@@ -225,32 +193,24 @@ class TrafficLightControllerNode(Node):
         else:
             self.current_velocity = self.target_velocity
 
-        # -- Publish VehicleCmd -------------------------------------------
+        # 5. Publish
         msg = VehicleCmd()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = 'base_link'
         msg.velocity = self.current_velocity
-        msg.heading = self.heading
+        msg.heading = float(self.target_heading)
         self.cmd_pub.publish(msg)
 
-        # -- Terminal log (single-line, overwritten) ----------------------
-        state_icon = {
-            'RED': '🔴', 'YELLOW': '🟡', 'GREEN': '🟢', 'UNKNOWN': '⚪'
-        }.get(effective_state, '?')
+        # 6. Terminal log
+        light_icon = {'RED': '🔴', 'YELLOW': '🟡', 'GREEN': '🟢', 'UNKNOWN': '⚪'}.get(eff_light, '?')
+        sign_icon = {'STOP': '🛑', 'SLOW_DOWN': '⚠️', 'TURN_LEFT': '⬅️', 'TURN_RIGHT': '➡️', 'NO_SIGNAL': '➖'}.get(eff_sign, '?')
 
         self.get_logger().info(
-            f'[HLC] {state_icon} {effective_state:7s} | '
-            f'target={self.target_velocity:.2f} m/s | '
-            f'cmd={self.current_velocity:.2f} m/s | '
-            f'heading={self.heading:.1f}°'
+            f'[HLC] {light_icon}{eff_light:7s} | {sign_icon}{eff_sign:10s} || '
+            f'v={self.current_velocity:.2f}m/s | h={self.target_heading:.0f}°'
         )
 
-    # ===================================================================
-    # Cleanup
-    # ===================================================================
-
     def destroy_node(self):
-        """Send stop command on shutdown."""
         self.get_logger().info('Shutting down — sending stop command...')
         msg = VehicleCmd()
         msg.header.stamp = self.get_clock().now().to_msg()
@@ -263,9 +223,7 @@ class TrafficLightControllerNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-
     node = TrafficLightControllerNode()
-
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
@@ -273,7 +231,6 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()
