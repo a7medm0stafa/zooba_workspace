@@ -179,12 +179,13 @@ class SignDetectionNode(Node):
                 approx = cv2.approxPolyDP(cnt, 0.03 * peri, True)
                 verts = len(approx)
                 print(f"[RED DETECTED] Area: {area:.0f} | Circ: {circ:.2f} | Verts: {verts} ")
+                
                 # Basic filters
                 if not (0.6 <= circ <= 0.95 and 6 <= verts <= 10):
-                    continue
+                    # continue
                 
                 # HEXAGON VERIFICATION - use angle check
-                if self._verify_hexagon_angles(approx):
+                # if self._verify_hexagon_angles(approx):
                     x, y, w, h_rect = cv2.boundingRect(cnt)
                     print(f"✓ STOP SIGN CONFIRMED")
                     return [('STOP', 1.0, (x, y, w, h_rect))]
