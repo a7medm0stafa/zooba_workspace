@@ -164,31 +164,60 @@ class SignDetectionNode(Node):
             best_detection = [all_found[0]]
         return best_detection, processed, hsv, debug_masks
 
-    # ── red  →  STOP ─────────────────────────────────────
     def _find_red(self, hsv):
-            mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
-            for lo, hi in RED_RANGES:
-                mask = cv2.bitwise_or(mask, cv2.inRange(hsv, lo, hi))
-            mask = self._clean_mask(mask)
-            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            for cnt in contours:
-                area = cv2.contourArea(cnt)
-                if area > self.min_area:
-                    peri = cv2.arcLength(cnt, True)
-                    circ = (4 * np.pi * area) / (peri**2) if peri > 0 else 0
-                    approx = cv2.approxPolyDP(cnt, 0.025 * peri, True)
-                    verts = len(approx)
-                    M = cv2.moments(cnt)
-                    if M["m00"] != 0:
-                        cx = int(M["m10"] / M["m00"])
-                        cy = int(M["m01"] / M["m00"])
-                        h, s, v = hsv[cy, cx]
-                        print(f"[RED DETECTED] Area: {area:.0f} | Circ: {circ:.2f} | Verts: {verts} | HSV: ({h},{s},{v})")            
-                    if 0.60 <= circ <= 0.90 and 6 <= verts <= 10:
-                            x, y, w, h_rect = cv2.boundingRect(cnt)
-                            return [('STOP', 1.0, (x, y, w, h_rect))]
-            return []
+        mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
+        for lo, hi in RED_RANGES:
+            mask = cv2.bitwise_or(mask, cv2.inRange(hsv, lo, hi))
+        mask = self._clean_mask(mask)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area > self.min_area:
+                peri = cv2.arcLength(cnt, True)
+                circ = (4 * np.pi * area) / (peri**2) if peri > 0 else 0
+                approx = cv2.approxPolyDP(cnt, 0.025 * peri, True)
+                verts = len(approx)
+                
+                # Basic filters
+                if not (0.75 <= circ <= 0.95 and 6 <= verts <= 10):
+                    continue
+                
+                # HEXAGON VERIFICATION - use angle check
+                if self._verify_hexagon_angles(approx):
+                    x, y, w, h_rect = cv2.boundingRect(cnt)
+                    print(f"✓ STOP SIGN CONFIRMED")
+                    return [('STOP', 1.0, (x, y, w, h_rect))]
+        
+        return []
 
+    def _verify_hexagon_angles(self, approx):
+        """Verify hexagonal shape by checking internal angles"""
+        if len(approx) < 6:
+            return False
+        
+        angles = []
+        for i in range(len(approx)):
+            p1 = approx[i-1][0]
+            p2 = approx[i][0]
+            p3 = approx[(i+1) % len(approx)][0]
+            
+            v1 = p1 - p2
+            v2 = p3 - p2
+            
+            cos_angle = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-6)
+            cos_angle = np.clip(cos_angle, -1.0, 1.0)
+            angle = np.degrees(np.arccos(cos_angle))
+            angles.append(angle)
+        
+        angle_std = np.std(angles)
+        angle_mean = np.mean(angles)
+        
+        print(f"  Angles μ={angle_mean:.1f}° σ={angle_std:.1f}°")
+        
+        # Hexagon: ~120° with low variance
+        # Circle: varying angles or all ~equal but not 120°
+        return angle_std < 20 and 105 < angle_mean < 135
     # ── yellow  →  SLOW_DOWN ─────────────────────────────
     def _find_yellow(self, hsv):
         lo, hi = YELLOW_RANGE
