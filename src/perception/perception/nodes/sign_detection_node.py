@@ -182,14 +182,15 @@ class SignDetectionNode(Node):
                 
                 # Basic filters
                 if not (0.6 <= circ <= 0.95 and 6 <= verts <= 10):
-                    # continue
-                
-                # HEXAGON VERIFICATION - use angle check
-                # if self._verify_hexagon_angles(approx):
                     x, y, w, h_rect = cv2.boundingRect(cnt)
                     print(f"✓ STOP SIGN CONFIRMED")
                     return [('STOP', 1.0, (x, y, w, h_rect))]
         
+                    # continue
+                
+                # HEXAGON VERIFICATION - use angle check
+                # if self._verify_hexagon_angles(approx):
+                   
         return []
 
     def _verify_hexagon_angles(self, approx):
