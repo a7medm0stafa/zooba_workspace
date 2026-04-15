@@ -185,7 +185,7 @@ class SignDetectionNode(Node):
                     x, y, w, h_rect = cv2.boundingRect(cnt)
                     print(f"✓ STOP SIGN CONFIRMED")
                     return [('STOP', 1.0, (x, y, w, h_rect))]
-        
+
                     # continue
                 
                 # HEXAGON VERIFICATION - use angle check
