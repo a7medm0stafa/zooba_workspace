@@ -1,0 +1,29 @@
+# Configuration for the High-Level Controller
+# =====================================================================
+
+traffic_light_controller_node:
+  ros__parameters:
+    # Speed on GREEN light (m/s)
+    cruise_velocity: 0.6
+
+    # Speed on YELLOW, UNKNOWN, SLOW_DOWN, or while turning (m/s)
+    slow_velocity: 0.4
+
+    # Default steering angle (degrees) — straight ahead
+    heading: 0.0
+
+    # Steering angle when a TURN_LEFT or TURN_RIGHT sign is detected
+    turn_heading: 30.0
+
+    # Command publish rate (Hz)
+    publish_rate: 20.0
+
+    # Subscribed topics from perception nodes
+    state_topic: "/traffic_light/state"
+    sign_topic: "/sign/command"
+
+    # Topic to publish VehicleCmd on (mid-level input)
+    output_topic: "/teleop/raw_cmd"
+
+    # If no data is received for this long (seconds), treat as UNKNOWN/NO_SIGNAL
+    unknown_timeout: 2.0
