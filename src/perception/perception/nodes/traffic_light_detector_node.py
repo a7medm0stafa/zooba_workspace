@@ -158,8 +158,9 @@ class TrafficLightDetectorNode(Node):
         _d('max_circle_distance', 80.0)
         _d('radius_tolerance', 0.5)
 
-        # Geometry validation (strict 3-circle)
+        # Geometry validation
         _d('alignment_tolerance', 2.0)
+        _d('min_cluster_size', 2)
 
         # Preprocessing
         _d('use_clahe', True)
@@ -335,7 +336,7 @@ class TrafficLightDetectorNode(Node):
 
     def _run_detection_pipeline(self, gray, hsv):
         """
-        Run the full pipeline: detect → filter → cluster → classify.
+        Run the full pipeline: detect → filter → cluster → validate → classify.
 
         If a valid cluster is found, switch to TRACKING mode.
 
@@ -345,7 +346,20 @@ class TrafficLightDetectorNode(Node):
         circles = self.detect_circles(gray)
         circles = self.filter_circles(circles, gray)
         clusters = self.cluster_circles(circles)
-        detected_state, cluster_info = self.classify_colors(clusters, hsv)
+
+        # -- Geometry gate: only keep clusters that look like a traffic light
+        validated_clusters = [
+            c for c in clusters
+            if self._validate_traffic_light_geometry(c) is not None
+        ]
+        # Fall back to unvalidated multi-circle clusters if nothing passes
+        if not validated_clusters:
+            min_sz = self._p('min_cluster_size')
+            validated_clusters = [c for c in clusters if len(c) >= min_sz]
+
+        detected_state, cluster_info = self.classify_colors(
+            validated_clusters, hsv
+        )
 
         # -- Attempt to enter TRACKING mode ----------------------------
         if detected_state != 'UNKNOWN' and cluster_info:
@@ -699,10 +713,11 @@ class TrafficLightDetectorNode(Node):
         for cluster in clusters:
             cluster.sort(key=lambda c: c[1])
 
-
-        # Prefer multi-circle clusters (2–3); fall back to all
-        preferred = [c for c in clusters if 2 <= len(c) <= 3]
-        return preferred if preferred else clusters
+        # Only keep clusters with at least min_cluster_size circles.
+        # Singletons from sign letters (O, S, etc.) are discarded.
+        min_sz = self._p('min_cluster_size')
+        valid = [c for c in clusters if len(c) >= min_sz]
+        return valid
 
     # ===================================================================
     # 4b. Geometry validation (strict 3-circle arrangement)
@@ -711,11 +726,16 @@ class TrafficLightDetectorNode(Node):
     def _validate_traffic_light_geometry(self, cluster):
         """Validate that a cluster forms a plausible traffic light.
 
-        Requirements:
-            - Exactly 3 circles.
+        Supports both 2-circle and 3-circle clusters:
+
+        For 3 circles:
             - Arranged vertically (preferred) or horizontally.
               Vertical: similar X-coords, roughly equal Y-spacing.
               Horizontal: similar Y-coords, roughly equal X-spacing.
+
+        For 2 circles:
+            - Aligned vertically or horizontally (one axis similar).
+            - Spacing between centres is reasonable (1.5× – 5× avg radius).
 
         Args:
             cluster: List of (x, y, r) tuples.
@@ -723,7 +743,7 @@ class TrafficLightDetectorNode(Node):
         Returns:
             'VERTICAL' or 'HORIZONTAL' if valid, None otherwise.
         """
-        if len(cluster) != 3:
+        if len(cluster) < 2 or len(cluster) > 3:
             return None
 
         align_tol = self._p('alignment_tolerance')
@@ -731,32 +751,49 @@ class TrafficLightDetectorNode(Node):
         xs = [c[0] for c in cluster]
         ys = [c[1] for c in cluster]
         rs = [c[2] for c in cluster]
-        avg_r = sum(rs) / 3.0
+        avg_r = sum(rs) / len(rs)
         max_axis_spread = align_tol * avg_r  # how far off-axis is OK
 
-        # --- Check VERTICAL arrangement (preferred) -------------------
-        # Sort by Y, check X-alignment and Y-spacing
-        sorted_by_y = sorted(cluster, key=lambda c: c[1])
-        x_spread = max(c[0] for c in sorted_by_y) - min(c[0] for c in sorted_by_y)
-        if x_spread <= max_axis_spread:
-            # Check roughly equal Y-spacing
-            gap1 = sorted_by_y[1][1] - sorted_by_y[0][1]
-            gap2 = sorted_by_y[2][1] - sorted_by_y[1][1]
-            if gap1 > 0 and gap2 > 0:
-                spacing_ratio = min(gap1, gap2) / max(gap1, gap2)
-                if spacing_ratio >= 0.5:  # gaps within 50% of each other
-                    return 'VERTICAL'
+        if len(cluster) == 3:
+            # --- 3-circle: Check VERTICAL arrangement -----------------
+            sorted_by_y = sorted(cluster, key=lambda c: c[1])
+            x_spread = max(c[0] for c in sorted_by_y) - min(c[0] for c in sorted_by_y)
+            if x_spread <= max_axis_spread:
+                gap1 = sorted_by_y[1][1] - sorted_by_y[0][1]
+                gap2 = sorted_by_y[2][1] - sorted_by_y[1][1]
+                if gap1 > 0 and gap2 > 0:
+                    spacing_ratio = min(gap1, gap2) / max(gap1, gap2)
+                    if spacing_ratio >= 0.5:
+                        return 'VERTICAL'
 
-        # --- Check HORIZONTAL arrangement -----------------------------
-        sorted_by_x = sorted(cluster, key=lambda c: c[0])
-        y_spread = max(c[1] for c in sorted_by_x) - min(c[1] for c in sorted_by_x)
-        if y_spread <= max_axis_spread:
-            gap1 = sorted_by_x[1][0] - sorted_by_x[0][0]
-            gap2 = sorted_by_x[2][0] - sorted_by_x[1][0]
-            if gap1 > 0 and gap2 > 0:
-                spacing_ratio = min(gap1, gap2) / max(gap1, gap2)
-                if spacing_ratio >= 0.5:
-                    return 'HORIZONTAL'
+            # --- 3-circle: Check HORIZONTAL arrangement ---------------
+            sorted_by_x = sorted(cluster, key=lambda c: c[0])
+            y_spread = max(c[1] for c in sorted_by_x) - min(c[1] for c in sorted_by_x)
+            if y_spread <= max_axis_spread:
+                gap1 = sorted_by_x[1][0] - sorted_by_x[0][0]
+                gap2 = sorted_by_x[2][0] - sorted_by_x[1][0]
+                if gap1 > 0 and gap2 > 0:
+                    spacing_ratio = min(gap1, gap2) / max(gap1, gap2)
+                    if spacing_ratio >= 0.5:
+                        return 'HORIZONTAL'
+
+        elif len(cluster) == 2:
+            c0, c1 = cluster[0], cluster[1]
+            dx = abs(c0[0] - c1[0])
+            dy = abs(c0[1] - c1[1])
+            dist = np.sqrt(dx ** 2 + dy ** 2)
+
+            # Spacing sanity: centres should be 1.5× – 5× avg radius apart
+            if dist < 1.5 * avg_r or dist > 5.0 * avg_r:
+                return None
+
+            # --- 2-circle: Check VERTICAL (X-aligned) -----------------
+            if dx <= max_axis_spread and dy > dx:
+                return 'VERTICAL'
+
+            # --- 2-circle: Check HORIZONTAL (Y-aligned) ---------------
+            if dy <= max_axis_spread and dx > dy:
+                return 'HORIZONTAL'
 
         return None
 
