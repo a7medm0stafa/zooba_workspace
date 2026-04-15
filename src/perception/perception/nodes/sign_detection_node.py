@@ -184,7 +184,7 @@ class SignDetectionNode(Node):
                         cy = int(M["m01"] / M["m00"])
                         h, s, v = hsv[cy, cx]
                         print(f"[RED DETECTED] Area: {area:.0f} | Circ: {circ:.2f} | Verts: {verts} | HSV: ({h},{s},{v})")            
-                    if 0.90 <= circ >= 0.60 and 6 <= verts <= 11:
+                    if 0.90 <= circ >= 0.60 and 6 <= verts <= 9:
                             x, y, w, h_rect = cv2.boundingRect(cnt)
                             return [('STOP', 1.0, (x, y, w, h_rect))]
             return []
