@@ -178,7 +178,7 @@ class SignDetectionNode(Node):
                 circ = (4 * np.pi * area) / (peri**2) if peri > 0 else 0
                 approx = cv2.approxPolyDP(cnt, 0.025 * peri, True)
                 verts = len(approx)
-                
+                print(f"[RED DETECTED] Area: {area:.0f} | Circ: {circ:.2f} | Verts: {verts} ")
                 # Basic filters
                 if not (0.75 <= circ <= 0.95 and 6 <= verts <= 10):
                     continue
