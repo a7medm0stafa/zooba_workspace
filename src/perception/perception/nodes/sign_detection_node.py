@@ -80,6 +80,7 @@ class SignDetectionNode(Node):
         self.declare_parameter('vote_window', 15)
         self.declare_parameter('vote_threshold', 11)
         self.declare_parameter('show_gui', True)
+        self.declare_parameter('output_topic', '/sign/command')
         
         # Load parameters
         self.min_area = self.get_parameter('min_area').value
@@ -88,6 +89,7 @@ class SignDetectionNode(Node):
         self.vote_window = self.get_parameter('vote_window').value
         self.vote_threshold = self.get_parameter('vote_threshold').value
         self.show_gui = self.get_parameter('show_gui').value
+        output_topic = self.get_parameter('output_topic').value
 
         # Log active params
         self.get_logger().info(f"Loaded params - min_area: {self.min_area}, show_gui: {self.show_gui}")
@@ -114,12 +116,13 @@ class SignDetectionNode(Node):
         self.test_images = [ "Turnn.png","SlowDown.png", "Stop.png"]
         self.img_idx = 0
 
-        # ROS Publisher for vehicle commands
+        # ROS Publisher for sign detection commands
         self.command_publisher = self.create_publisher(
             String,
-            'vehicle/command',
+            output_topic,
             10
         )
+        self.get_logger().info(f"Publishing sign commands on: {output_topic}")
 
         # Timer running at ~20 FPS
         self.timer = self.create_timer(0.05, self.timer_callback)
