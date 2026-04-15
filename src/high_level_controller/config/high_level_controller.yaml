@@ -1,0 +1,29 @@
+# Configuration for the Traffic Light Controller (High-Level Controller)
+# =====================================================================
+# This file is loaded at node startup. To override without rebuilding,
+# copy to high_level_controller.local.yaml in the same directory.
+
+traffic_light_controller_node:
+  ros__parameters:
+    # Speed on GREEN light (m/s)
+    cruise_velocity: 0.6
+
+    # Speed on YELLOW or UNKNOWN light (m/s) — cautious default
+    slow_velocity: 0.3
+
+    # Fixed steering angle (degrees) — straight ahead
+    # Sign detection will handle turns separately in the future
+    heading: 0.0
+
+    # Command publish rate (Hz) — matches mid-level constraints node
+    publish_rate: 20.0
+
+    # Topic to subscribe to for traffic light state
+    state_topic: "/traffic_light/state"
+
+    # Topic to publish VehicleCmd on (mid-level input)
+    output_topic: "/teleop/raw_cmd"
+
+    # If no traffic light state is received for this long (seconds),
+    # treat the situation as UNKNOWN and slow down
+    unknown_timeout: 2.0
