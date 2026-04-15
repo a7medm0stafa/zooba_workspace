@@ -1,12 +1,12 @@
 traffic_light_detector_node:
   ros__parameters:
     # ── Circle Detection (HoughCircles) ──────────────────────────
-    dp: 2.0  # Inverse accumulator resolution ratio (Higher = Much faster, less precise)
-    min_dist: 8.0 # Min distance between circle centers (px)
-    param1: 165.0 # Canny threshold (Increased to ignore weak texture/noise)
-    param2: 65.0 # Accumulator threshold (Increased to demand more perfect circles)
-    min_radius: 4 # Min circle radius (px)
-    max_radius: 40 # Max circle radius (px)
+    dp: 1.2 # Inverse accumulator resolution ratio (Higher = Much faster, less precise)
+    min_dist: 10.0 # Min distance between circle centers (px)
+    param1: 150.0 # Canny threshold (Increased to ignore weak texture/noise)
+    param2: 30.0 # Accumulator threshold (Increased to demand more perfect circles)
+    min_radius: 5 # Min circle radius (px)
+    max_radius: 30 # Max circle radius (px)
 
     # ── ROI ──────────────────────────────────────────────────────
     roi_height_ratio: 0.8 # Fraction of image height from top
@@ -52,6 +52,6 @@ traffic_light_detector_node:
     tracking_lost_frames: 5 # Consecutive failed frames before reverting to DETECTION
 
     # ── Stream ───────────────────────────────────────────────────
-    processing_rate: 10.0 # Pipeline processing rate in Hz
+    processing_rate: 20.0 # Pipeline processing rate in Hz
     show_debug_display: true # Whether to show the OpenCV debug windows locally
 
