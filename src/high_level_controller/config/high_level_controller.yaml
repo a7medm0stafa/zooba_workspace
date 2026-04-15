@@ -9,14 +9,14 @@ traffic_light_controller_node:
     cruise_velocity: 0.6
 
     # Speed on YELLOW or UNKNOWN light (m/s) — cautious default
-    slow_velocity: 0.3
+    slow_velocity: 0.2
 
     # Fixed steering angle (degrees) — straight ahead
     # Sign detection will handle turns separately in the future
     heading: 0.0
 
     # Command publish rate (Hz) — matches mid-level constraints node
-    publish_rate: 20.0
+    publish_rate: 10.0
 
     # Topic to subscribe to for traffic light state
     state_topic: "/traffic_light/state"

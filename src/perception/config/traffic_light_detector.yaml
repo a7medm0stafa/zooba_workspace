@@ -4,7 +4,7 @@ traffic_light_detector_node:
     dp: 1.2 # Inverse accumulator resolution ratio (Higher = Much faster, less precise)
     min_dist: 15.0 # Min distance between circle centers (px)
     param1: 150.0 # Canny threshold (Increased to ignore weak texture/noise)
-    param2: 60.0 # Accumulator threshold (Increased to demand more perfect circles)
+    param2: 65.0 # Accumulator threshold (Increased to demand more perfect circles)
     min_radius: 5 # Min circle radius (px)
     max_radius: 30 # Max circle radius (px)
 
@@ -16,19 +16,19 @@ traffic_light_detector_node:
 
     # ── Color Thresholds (HSV) ───────────────────────────────────
     # Red range 1 (low hue)
-    red_lower1: [0, 60, 40]
+    red_lower1: [0, 60, 30]
     red_upper1: [10, 255, 255]
 
     # Red range 2 (high hue wrap-around)
-    red_lower2: [160, 60, 40]
+    red_lower2: [160, 60, 30]
     red_upper2: [179, 255, 255]
 
     # Yellow
-    yellow_lower: [12, 60, 40]
+    yellow_lower: [12, 60, 30]
     yellow_upper: [40, 255, 255]
 
     # Green
-    green_lower: [30, 50, 40]
+    green_lower: [30, 50, 30]
     green_upper: [105, 255, 255]
 
     # ── Clustering ───────────────────────────────────────────────
