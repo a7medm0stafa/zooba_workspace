@@ -50,8 +50,8 @@ class NonHolonomicConstraintsNode(Node):
         # Sign detection parameters
         self.declare_parameter('sign_command_topic', '/sign/command')
         self.declare_parameter('stop_velocity', 0.0)
-        self.declare_parameter('slow_velocity', 0.3)
-        self.declare_parameter('turn_velocity', 0.4)
+        self.declare_parameter('slow_velocity', 0.75)
+        self.declare_parameter('turn_velocity', 1.0)
         self.declare_parameter('turn_heading', 20.0)           # Hz
 
         self.wheelbase = self.get_parameter('wheelbase').value
