@@ -181,7 +181,7 @@ class SignDetectionNode(Node):
                 print(f"[RED DETECTED] Area: {area:.0f} | Circ: {circ:.2f} | Verts: {verts} ")
                 
                 # Basic filters
-                if not (0.6 <= circ <= 0.95 and 6 <= verts <= 10):
+                if (0.6 <= circ <= 0.95 and 6 <= verts <= 10):
                     x, y, w, h_rect = cv2.boundingRect(cnt)
                     print(f"✓ STOP SIGN CONFIRMED")
                     return [('STOP', 1.0, (x, y, w, h_rect))]
