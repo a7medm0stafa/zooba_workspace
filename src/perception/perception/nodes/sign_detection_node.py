@@ -180,7 +180,7 @@ class SignDetectionNode(Node):
                 verts = len(approx)
                 print(f"[RED DETECTED] Area: {area:.0f} | Circ: {circ:.2f} | Verts: {verts} ")
                 # Basic filters
-                if not (0.75 <= circ <= 0.95 and 6 <= verts <= 10):
+                if not (0.6 <= circ <= 0.95 and 6 <= verts <= 10):
                     continue
                 
                 # HEXAGON VERIFICATION - use angle check
