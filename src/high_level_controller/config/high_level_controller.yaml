@@ -9,7 +9,7 @@ traffic_light_controller_node:
     cruise_velocity: 0.6
 
     # Speed on YELLOW or UNKNOWN light (m/s) — cautious default
-    slow_velocity: 0.2
+    slow_velocity: 0.4
 
     # Fixed steering angle (degrees) — straight ahead
     # Sign detection will handle turns separately in the future
