@@ -176,7 +176,7 @@ class SignDetectionNode(Node):
                 if area > self.min_area:
                     peri = cv2.arcLength(cnt, True)
                     circ = (4 * np.pi * area) / (peri**2) if peri > 0 else 0
-                    approx = cv2.approxPolyDP(cnt, 0.03 * peri, True)
+                    approx = cv2.approxPolyDP(cnt, 0.015 * peri, True)
                     verts = len(approx)
                     M = cv2.moments(cnt)
                     if M["m00"] != 0:
@@ -184,7 +184,7 @@ class SignDetectionNode(Node):
                         cy = int(M["m01"] / M["m00"])
                         h, s, v = hsv[cy, cx]
                         print(f"[RED DETECTED] Area: {area:.0f} | Circ: {circ:.2f} | Verts: {verts} | HSV: ({h},{s},{v})")            
-                    if 0.70 <= circ >= 0.20 and 6 <= verts <= 11:
+                    if 0.90 <= circ >= 0.60 and 6 <= verts <= 11:
                             x, y, w, h_rect = cv2.boundingRect(cnt)
                             return [('STOP', 1.0, (x, y, w, h_rect))]
             return []
@@ -210,7 +210,7 @@ class SignDetectionNode(Node):
                     print(f"[YELLOW DETECTED] Area: {area:.0f} | Circ: {circ:.2f} | Verts: {verts} | HSV: ({h},{s},{v})")
         return self._classify_contours(mask, 'SLOW_DOWN', 
                                        min_vertices=3, max_vertices=7, 
-                                       min_circularity=0.1)
+                                       min_circularity=0.6)
 
     # ── blue  →  TURN_LEFT / TURN_RIGHT ──────────────────
     def _find_blue(self, hsv, frame):
