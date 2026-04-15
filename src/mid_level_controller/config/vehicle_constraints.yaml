@@ -25,6 +25,6 @@ nonholonomic_constraints_node:
     # Sign detection integration
     sign_command_topic: /sign/command
     stop_velocity: 0.0         # Velocity when STOP sign detected [m/s]
-    slow_velocity: 0.3         # Velocity when SLOW_DOWN sign detected [m/s]
-    turn_velocity: 0.4         # Velocity when TURN sign detected [m/s]
+    slow_velocity: 0.75         # Velocity when SLOW_DOWN sign detected [m/s]
+    turn_velocity: 1.0         # Velocity when TURN sign detected [m/s]
     turn_heading: 20.0         # Heading angle for TURN commands [degrees]
