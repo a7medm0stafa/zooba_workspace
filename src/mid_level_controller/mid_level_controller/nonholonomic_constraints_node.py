@@ -21,9 +21,11 @@ Publishes:
 """
 
 import math
+import time
 
 import rclpy
 from rclpy.node import Node
+from std_msgs.msg import String
 from vehicle_interfaces.msg import VehicleCmd, VehicleConstraints
 
 
@@ -43,7 +45,14 @@ class NonHolonomicConstraintsNode(Node):
         self.declare_parameter('input_topic', '/teleop/raw_cmd')
         self.declare_parameter('output_topic', '/vehicle/cmd')
         self.declare_parameter('constraints_topic', '/vehicle/constraints')
-        self.declare_parameter('publish_rate', 20.0)           # Hz
+        self.declare_parameter('publish_rate', 20.0)
+
+        # Sign detection parameters
+        self.declare_parameter('sign_command_topic', '/sign/command')
+        self.declare_parameter('stop_velocity', 0.0)
+        self.declare_parameter('slow_velocity', 0.3)
+        self.declare_parameter('turn_velocity', 0.4)
+        self.declare_parameter('turn_heading', 20.0)           # Hz
 
         self.wheelbase = self.get_parameter('wheelbase').value
         self.track_width = self.get_parameter('track_width').value
@@ -56,6 +65,13 @@ class NonHolonomicConstraintsNode(Node):
         output_topic = self.get_parameter('output_topic').value
         constraints_topic = self.get_parameter('constraints_topic').value
         publish_rate = self.get_parameter('publish_rate').value
+
+        # Sign detection parameters
+        sign_command_topic = self.get_parameter('sign_command_topic').value
+        self.stop_velocity = self.get_parameter('stop_velocity').value
+        self.slow_velocity = self.get_parameter('slow_velocity').value
+        self.turn_velocity = self.get_parameter('turn_velocity').value
+        self.turn_heading = self.get_parameter('turn_heading').value
 
         # ---- Derived constants ----
         max_steer_rad = math.radians(self.max_steering_angle)
@@ -71,11 +87,24 @@ class NonHolonomicConstraintsNode(Node):
         self.current_heading = 0.0
         self.last_update_time = self.get_clock().now()
 
-        # ---- Subscriber ----
+        # ---- Sign detection state ----
+        self.sign_command = 'NO_SIGNAL'  # Current active sign command
+        self.sign_active = False          # Whether a sign is overriding teleop
+        self.last_sign_time = time.time() # Timestamp of last sign command received
+
+        # ---- Subscriber (teleop) ----
         self.raw_cmd_sub = self.create_subscription(
             VehicleCmd,
             input_topic,
             self._raw_cmd_callback,
+            10
+        )
+
+        # ---- Subscriber (sign detection) ----
+        self.sign_cmd_sub = self.create_subscription(
+            String,
+            sign_command_topic,
+            self._sign_cmd_callback,
             10
         )
 
@@ -93,6 +122,7 @@ class NonHolonomicConstraintsNode(Node):
         self.get_logger().info('=' * 58)
         self.get_logger().info('Non-Holonomic Constraints Node Started')
         self.get_logger().info(f'  Input topic      : {input_topic}')
+        self.get_logger().info(f'  Sign cmd topic   : {sign_command_topic}')
         self.get_logger().info(f'  Output topic     : {output_topic}')
         self.get_logger().info(f'  Wheelbase        : {self.wheelbase:.3f} m')
         self.get_logger().info(f'  Track width      : {self.track_width:.3f} m')
@@ -102,14 +132,52 @@ class NonHolonomicConstraintsNode(Node):
         self.get_logger().info(f'  Vel rate limit   : {self.max_velocity_rate:.2f} m/s²')
         self.get_logger().info(f'  Steer rate limit : {self.max_steering_rate:.1f} °/s')
         self.get_logger().info(f'  Output rate      : {publish_rate:.0f} Hz')
+        self.get_logger().info(f'  Sign speeds      : STOP={self.stop_velocity}, SLOW={self.slow_velocity}, TURN={self.turn_velocity} m/s')
+        self.get_logger().info(f'  Turn heading     : ±{self.turn_heading}°')
         self.get_logger().info('=' * 58)
 
     # ==================== Callbacks ====================
 
     def _raw_cmd_callback(self, msg: VehicleCmd):
-        """Store the latest desired (unconstrained) command."""
-        self.desired_velocity = msg.velocity
-        self.desired_heading = msg.heading
+        """Store the latest desired (unconstrained) command from teleop."""
+        # Only use teleop if no sign is actively overriding
+        if not self.sign_active:
+            self.desired_velocity = msg.velocity
+            self.desired_heading = msg.heading
+
+    def _sign_cmd_callback(self, msg: String):
+        """Handle sign detection commands — override teleop when a sign is active."""
+        command = msg.data.strip()
+        self.sign_command = command
+        self.last_sign_time = time.time()
+
+        if command == 'STOP':
+            self.sign_active = True
+            self.desired_velocity = self.stop_velocity
+            self.desired_heading = 0.0
+            self.get_logger().info(f'SIGN CMD: STOP → vel={self.stop_velocity}')
+
+        elif command == 'SLOW_DOWN':
+            self.sign_active = True
+            self.desired_velocity = self.slow_velocity
+            self.desired_heading = 0.0
+            self.get_logger().info(f'SIGN CMD: SLOW_DOWN → vel={self.slow_velocity}')
+
+        elif command == 'TURN_LEFT':
+            self.sign_active = True
+            self.desired_velocity = self.turn_velocity
+            self.desired_heading = -self.turn_heading  # Negative = left
+            self.get_logger().info(f'SIGN CMD: TURN_LEFT → vel={self.turn_velocity}, hdg={-self.turn_heading}°')
+
+        elif command == 'TURN_RIGHT':
+            self.sign_active = True
+            self.desired_velocity = self.turn_velocity
+            self.desired_heading = self.turn_heading  # Positive = right
+            self.get_logger().info(f'SIGN CMD: TURN_RIGHT → vel={self.turn_velocity}, hdg={self.turn_heading}°')
+
+        elif command == 'NO_SIGNAL':
+            self.sign_active = False
+            # Teleop resumes control (next _raw_cmd_callback will set desired values)
 
     def _timer_callback(self):
         """Apply constraints and publish at fixed rate."""
