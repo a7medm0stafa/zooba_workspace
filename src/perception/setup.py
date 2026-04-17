@@ -31,6 +31,7 @@ setup(
             'vehicle_actuator_node = perception.nodes.vehicle_actuator_node:main',
             'traffic_light_detector_node = perception.nodes.traffic_light_detector_node:main',
             'camera_publisher = perception.nodes.camera_publisher_node:main',
+            'dashboard_node = perception.nodes.dashboard_node:main',
             'debug_viewer = perception.nodes.debug_viewer:main',
         ],
     },

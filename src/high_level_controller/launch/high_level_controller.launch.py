@@ -91,7 +91,7 @@ def generate_launch_description():
         parameters=[{
             'camera_topic': '/camera/image_raw',
             'output_topic': '/sign/command',
-            'show_gui': LaunchConfiguration('show_gui'),
+            'show_gui': False,
         }],
     )
 
@@ -104,7 +104,7 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('with_perception')),
         parameters=[{
             'camera_topic': '/camera/image_raw',
-            'show_debug_display': LaunchConfiguration('show_gui'),
+            'show_debug_display': False,
         }],
     )
 
@@ -150,6 +150,20 @@ def generate_launch_description():
         output='screen',
     )
 
+    # ---- 8. Dashboard HUD (optional, when GUI is enabled) ----
+    dashboard = Node(
+        package='perception',
+        executable='dashboard_node',
+        name='dashboard_node',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('show_gui')),
+        parameters=[{
+            'camera_topic': '/camera/image_raw',
+            'window_width': 800,
+            'window_height': 480,
+        }],
+    )
+
     return LaunchDescription([
         hlc_config_arg,
         mlc_config_arg,
@@ -166,4 +180,6 @@ def generate_launch_description():
         constraints_node,
         # Low-level
         low_level_node,
+        # Dashboard
+        dashboard,
     ])
