@@ -48,6 +48,8 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from std_msgs.msg import String
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 from ament_index_python.packages import get_package_share_directory
 
 
@@ -71,16 +73,14 @@ class TrafficLightDetectorNode(Node):
         # -- Declare every configurable parameter ----------------------
         self._declare_parameters()
 
-        # -- Hardware Camera Capture -----------------------------------
-        # Using CAP_V4L2 explicitly prevents GStreamer memory allocation errors on Raspberry Pi
-        self.cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        self.cap.set(cv2.CAP_PROP_FPS, 10) # Drop hardware FPS to prevent queue backlog
-        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1) # Prevent old frames trailing in the buffer
-        
-        if not self.cap.isOpened():
-            self.get_logger().error("Cannot open camera hardware (VideoCapture 0)")
+        # -- Subscribe to shared camera topic --------------------------
+        camera_topic = self._p('camera_topic')
+        self.bridge = CvBridge()
+        self.latest_frame = None
+        self.image_sub = self.create_subscription(
+            Image, camera_topic, self._image_callback, 10
+        )
+        self.get_logger().info(f'Subscribing to camera on: {camera_topic}')
         
         # -- Publishers ------------------------------------------------
         self.state_pub = self.create_publisher(
@@ -94,8 +94,6 @@ class TrafficLightDetectorNode(Node):
 
         # -- Stream state ----------------------------------------------
         self.latest_frame = None          # Most recent BGR frame
-        self.frame_stamp = 0.0            # time.time() of latest frame
-        self.last_processed_stamp = 0.0   # Stamp of last processed frame
 
         # -- Temporal filtering ----------------------------------------
         self.state_history: deque = deque(maxlen=30)
@@ -179,6 +177,7 @@ class TrafficLightDetectorNode(Node):
         # Stream
         _d('processing_rate', 20.0)
         _d('show_debug_display', True)
+        _d('camera_topic', '/camera/image_raw')
 
     def _load_yaml_params(self) -> dict:
         """Load parameter values from a YAML config file.
@@ -255,6 +254,17 @@ class TrafficLightDetectorNode(Node):
         return self.get_parameter(name).value
 
     # ===================================================================
+    # Camera subscription callback
+    # ===================================================================
+
+    def _image_callback(self, msg: Image):
+        """Store the latest camera frame from the shared camera topic."""
+        try:
+            self.latest_frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        except Exception as e:
+            self.get_logger().error(f'CvBridge error: {e}')
+
+    # ===================================================================
     # Processing timer callback (runs the pipeline)
     # ===================================================================
 
@@ -262,20 +272,13 @@ class TrafficLightDetectorNode(Node):
         """
         Timer-driven processing loop.
 
-        Captures hardware frame, decides between DETECTION and TRACKING
-        modes, runs the appropriate pipeline, and publishes results.
+        Uses the latest frame from the camera subscription, decides between
+        DETECTION and TRACKING modes, runs the appropriate pipeline, and
+        publishes results.
         """
-        if not self.cap.isOpened():
+        frame = self.latest_frame
+        if frame is None:
             return
-            
-        ret, frame = self.cap.read()
-        if not ret:
-            self.get_logger().warn("Failed to grab frame from camera")
-            return
-
-
-        # Flip the frame to correct for the upside-down physical camera mount (180 degree rotation)
-        frame = cv2.flip(frame, -1)
 
         t_start = time.time()
 
@@ -1111,8 +1114,6 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        if hasattr(node, 'cap') and node.cap.isOpened():
-            node.cap.release()
         cv2.destroyAllWindows()
         node.destroy_node()
         if rclpy.ok():

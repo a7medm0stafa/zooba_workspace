@@ -22,8 +22,8 @@ traffic_light_controller_node:
     state_topic: "/traffic_light/state"
     sign_topic: "/sign/command"
 
-    # Topic to publish VehicleCmd on (mid-level input)
-    output_topic: "/teleop/raw_cmd"
+    # Topic to publish VehicleCmd on (consumed by the command arbiter)
+    output_topic: "/teleop/auto_cmd"
 
     # If no data is received for this long (seconds), treat as UNKNOWN/NO_SIGNAL
     unknown_timeout: 2.0

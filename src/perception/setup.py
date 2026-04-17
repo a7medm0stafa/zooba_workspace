@@ -30,7 +30,7 @@ setup(
             'sign_detection_node = perception.nodes.sign_detection_node:main',
             'vehicle_actuator_node = perception.nodes.vehicle_actuator_node:main',
             'traffic_light_detector_node = perception.nodes.traffic_light_detector_node:main',
-            'camera_publisher = perception.nodes.camera_publisher:main',
+            'camera_publisher = perception.nodes.camera_publisher_node:main',
             'debug_viewer = perception.nodes.debug_viewer:main',
         ],
     },
