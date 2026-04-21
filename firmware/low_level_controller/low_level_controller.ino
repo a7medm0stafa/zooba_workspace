@@ -102,7 +102,7 @@ const float MAX_OUTPUT_RPM      = 71.95;           // Max RPM at output shaft
 // Tunable gains for closed-loop speed control
 float PI_KP = 1.5;      // Proportional gain
 float PI_KI = 0.8;      // Integral gain
-float PI_INTEGRAL_MAX = 200.0;  // Anti-windup limit
+float PI_INTEGRAL_MAX = 400.0;  // Anti-windup limit (increased to allow 100% PWM)
 int   PI_PWM_MIN = 30;         // Minimum PWM to overcome static friction
 
 // PI state
@@ -164,7 +164,7 @@ unsigned long lastIMUTime = 0;
 // ==================== Encoder ISR ====================
 void encoderISR_A()
 {
-    if (digitalRead(PIN_ENC_B) == LOW)
+    if (digitalRead(PIN_ENC_A) != digitalRead(PIN_ENC_B))
         encoderTicks++;
     else
         encoderTicks--;
@@ -172,10 +172,10 @@ void encoderISR_A()
 
 void encoderISR_B()
 {
-    if (digitalRead(PIN_ENC_A) == LOW)
-        encoderTicks--;
-    else
+    if (digitalRead(PIN_ENC_A) == digitalRead(PIN_ENC_B))
         encoderTicks++;
+    else
+        encoderTicks--;
 }
 
 // ==================== IMU Functions ====================
@@ -353,8 +353,8 @@ void setup()
     // Encoder pins
     pinMode(PIN_ENC_A, INPUT_PULLUP);
     pinMode(PIN_ENC_B, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(PIN_ENC_A), encoderISR_A, RISING);
-    attachInterrupt(digitalPinToInterrupt(PIN_ENC_B), encoderISR_B, RISING);
+    attachInterrupt(digitalPinToInterrupt(PIN_ENC_A), encoderISR_A, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(PIN_ENC_B), encoderISR_B, CHANGE);
 
     // Servo
     steeringServo.attach(PIN_SERVO);
