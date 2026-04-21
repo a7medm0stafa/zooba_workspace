@@ -1,6 +1,7 @@
 /*
  * Low-Level Controller — Arduino Firmware (PI Speed Control + IMU)
  * ================================================================
+ *AHMED WAS HERE
  * Receives serial commands from Raspberry Pi 4B and controls:
  *   - DC motor via L298N motor driver (open-loop PWM or closed-loop PI)
  *   - Servo motor (steering / heading angle)
@@ -29,12 +30,13 @@
  *     "1,500,90\n"   → PI control, target 50.0 RPM forward, centered
  *     "1,-300,80\n"  → PI control, target 30.0 RPM reverse, servo 80°
  *
- *   Feedback: "FB:<rpm>,<ticks>,<ax>,<ay>,<az>,<gx>,<gy>,<gz>,<yaw>\n"
+ *   Feedback: "FB:<rpm>,<ticks>,<ax>,<ay>,<az>,<gx>,<gy>,<gz>,<yaw>,<angle>\n"
  *             rpm:   actual output shaft RPM (float, 1 decimal)
  *             ticks: cumulative encoder ticks (long)
  *             ax/ay/az: accelerometer [m/s² × 100, integer]
  *             gx/gy/gz: gyroscope [rad/s × 100, integer]
  *             yaw:   complementary-filter yaw [degrees × 10, integer]
+ *             angle: cumulative output shaft rotation angle [degrees, float]
  *   Ack:      "OK\n" after each valid command
  *
  * Commands latch: motor/servo hold last command until a new one is received.
@@ -76,15 +78,25 @@ const int PIN_SERVO = 9;
 // IMU (HW-123 / MPU6050) uses I2C: SDA=A4, SCL=A5 (handled by Wire library)
 const int MPU6050_ADDR = 0x68;
 
-// ==================== Encoder Configuration ====================
-// JGA25-370 Motor with Hall Encoder (12V)
-// Encoder: 11 PPR (pulses per revolution) on motor shaft
-// Quadrature decoding (CHANGE on both channels): 11 × 4 = 44 counts/rev (motor shaft)
-// Gear ratio: 1:44.727
-// Output shaft CPR = 44 × 44.727 ≈ 1968
-const int MOTOR_CPR    = 44;      // Counts per motor shaft revolution
-const float GEAR_RATIO = 44.727;  // Gear reduction ratio
-const int ENCODER_CPR  = 1968;    // Effective CPR at output shaft (44 × 44.727)
+// ==================== Encoder / Drivetrain Configuration ====================
+// Motor: max 200 RPM at internal gearbox output shaft
+// Internal gearbox ratio : 1:44.727  (keep as measured)
+// External herringbone gears: 16.35 mm (drive) → 45.45 mm (driven)
+//   External ratio = 45.45 / 16.35 = 2.7798
+// Total ratio (encoder shaft → output shaft) = 44.727 × 2.7798 = 124.333
+// Output shaft max RPM  = 200 / 2.7798 ≈ 71.95 RPM
+// Wheel radius          = 33 mm = 0.033 m
+// Max linear velocity   = 71.95 × 2π × 0.033 / 60 ≈ 0.249 m/s
+//
+// Encoder: 11 PPR on motor (rotor) shaft → 44 counts/rev (quadrature)
+// Output shaft CPR = 44 × 124.333 = 5470.65 ≈ 5471
+const int   MOTOR_CPR           = 44;              // Quadrature counts/rev on motor shaft
+const float INTERNAL_GEAR_RATIO = 44.727;          // Internal gearbox reduction (measured)
+const float EXTERNAL_GEAR_RATIO = 45.45 / 16.35;  // External herringbone pair (45.45mm / 16.35mm) = 2.7798
+const float GEAR_RATIO          = INTERNAL_GEAR_RATIO * EXTERNAL_GEAR_RATIO; // 124.333
+const int   ENCODER_CPR         = 5471;            // Effective CPR at output shaft (44 × 124.333)
+const float WHEEL_RADIUS_M      = 0.033;           // Wheel radius [m]
+const float MAX_OUTPUT_RPM      = 71.95;           // Max RPM at output shaft
 
 // ==================== PI Controller Configuration ====================
 // Tunable gains for closed-loop speed control
@@ -540,7 +552,7 @@ void sendFeedback()
     long ticks = encoderTicks;
     interrupts();
 
-    // Format: FB:<rpm>,<ticks>,<ax>,<ay>,<az>,<gx>,<gy>,<gz>,<yaw>
+    // Format: FB:<rpm>,<ticks>,<ax>,<ay>,<az>,<gx>,<gy>,<gz>,<yaw>,<angle>
     // IMU values × 100 as integers for fast parsing
     Serial.print("FB:");
     Serial.print(currentRPM, 1);
@@ -564,6 +576,11 @@ void sendFeedback()
         Serial.print(",");
         Serial.print((int)(imuYaw * 10));
     }
+
+    // Output shaft cumulative rotation angle in degrees
+    float angle_deg = ((float)ticks / ENCODER_CPR) * 360.0;
+    Serial.print(",");
+    Serial.print(angle_deg, 2);
 
     Serial.println();
 }

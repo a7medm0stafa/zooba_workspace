@@ -26,12 +26,12 @@ def generate_launch_description():
         description='Serial baud rate'
     )
     max_velocity_arg = DeclareLaunchArgument(
-        'max_velocity', default_value='0.6',
-        description='Maximum velocity in m/s'
+        'max_velocity', default_value='0.249',
+        description='Maximum velocity in m/s (physical max ~0.249 m/s)'
     )
     wheel_radius_arg = DeclareLaunchArgument(
         'wheel_radius', default_value='0.033',
-        description='Wheel radius in meters (for velocity ↔ RPM conversion)'
+        description='Wheel radius in meters (33 mm wheel)'
     )
     servo_center_arg = DeclareLaunchArgument(
         'servo_center', default_value='90',

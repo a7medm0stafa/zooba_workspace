@@ -70,8 +70,8 @@ def generate_launch_description():
         parameters=[{
             'serial_port': LaunchConfiguration('serial_port'),
             'baud_rate': 115200,
-            'max_velocity': 1.0,
-            'wheel_radius': 0.033,
+            'max_velocity': 0.249,       # max ~ 71.95 RPM × 2π×0.033/60
+            'wheel_radius': 0.033,       # 33 mm wheel
             'servo_center': 90,
             'servo_min': 45,
             'servo_max': 135,
@@ -80,7 +80,7 @@ def generate_launch_description():
             'feedback_topic': '/vehicle/feedback',
             'imu_topic': '/vehicle/imu',
             'use_pi_mode': LaunchConfiguration('use_pi_mode'),
-            'gear_ratio': 134.181,
+            'gear_ratio': 124.333,       # 44.727 (internal) × 2.7798 (herringbone 45.45/16.35)
         }],
     )
 
@@ -92,8 +92,8 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'wheelbase': 0.22,
-            'wheel_radius': 0.033,
-            'encoder_cpr': 5904,
+            'wheel_radius': 0.033,       # 33 mm wheel
+            'encoder_cpr': 5471,         # 44 × 44.727 × (45.45/16.35) = 44 × 124.333
             'use_imu_heading': True,
             'source': 'hardware',
             'feedback_topic': '/vehicle/feedback',
@@ -113,7 +113,7 @@ def generate_launch_description():
             'desired_speed': LaunchConfiguration('desired_speed'),
             'kp': LaunchConfiguration('kp'),
             'ki': LaunchConfiguration('ki'),
-            'max_velocity': 1.0,
+            'max_velocity': 0.249,       # physical max ~0.249 m/s
             'control_rate': 20.0,
             'state_topic': '/vehicle/state',
             'output_topic': '/teleop/speed_cmd',
