@@ -1,19 +1,15 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>zooba_simulation</name>
+  <name>high_level_controller</name>
   <version>0.1.0</version>
-  <description>Simulation bridge: translates VehicleCmd to Gazebo Ackermann steering vehicle topics</description>
+  <description>High-level autonomous controller: reacts to perception (traffic lights, signs) and issues driving commands</description>
   <maintainer email="ahm.mostafa03@gmail.com">ahmed</maintainer>
   <license>MIT</license>
 
-  <depend>rclpy</depend>
-  <depend>std_msgs</depend>
-  <depend>sensor_msgs</depend>
-  <depend>tf2_msgs</depend>
-  <depend>vehicle_interfaces</depend>
-
-  <exec_depend>gazebo_ackermann_steering_vehicle</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>vehicle_interfaces</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

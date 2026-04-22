@@ -1,115 +1,104 @@
 """
-Launch file for closed-loop control in Gazebo simulation.
+Launch file for closed-loop control on hardware (Raspberry Pi + Arduino).
 
 Launches:
-    - Gazebo with empty world + Ackermann vehicle
-    - Sim bridge (extended — publishes VehicleState + VehicleFeedback)
+    - Low-level controller node (serial to Arduino — PI or open-loop)
+    - Odometry node (encoder + IMU → VehicleState)
     - Speed control node (PI controller)
     - Lateral control node (Stanley controller)
     - Control merger node (speed + lateral → VehicleCmd)
     - Non-holonomic constraints node
 
 Usage:
-    # Default:
-    ros2 launch zooba_simulation closed_loop_sim.launch.py
+    # Default (PI mode on Arduino):
+    ros2 launch low_level_controller closed_loop_hw.launch.py
 
-    # Custom initial pose and goals:
-    ros2 launch zooba_simulation closed_loop_sim.launch.py \\
-        x:=1.0 y:=0.0 Y:=0.0 \\
-        desired_speed:=0.8 desired_y:=2.0
+    # Custom speed goal:
+    ros2 launch low_level_controller closed_loop_hw.launch.py desired_speed:=0.8
 
-    # Custom PI gains:
-    ros2 launch zooba_simulation closed_loop_sim.launch.py \\
-        kp:=2.0 ki:=0.3 k_stanley:=3.0
+    # Open-loop mode (skip Arduino PI):
+    ros2 launch low_level_controller closed_loop_hw.launch.py use_pi_mode:=false
 """
 
 import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
-from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
 
-    # ---- Launch arguments: initial pose ----
-    world_arg = DeclareLaunchArgument(
-        'world', default_value='empty.sdf',
-        description='Gazebo world file'
+    # ---- Launch arguments ----
+    serial_port_arg = DeclareLaunchArgument(
+        'serial_port', default_value='/dev/ttyACM0',
+        description='Arduino serial port'
     )
-    x_arg = DeclareLaunchArgument('x', default_value='0.0',
-                                  description='Initial X position')
-    y_arg = DeclareLaunchArgument('y', default_value='0.0',
-                                  description='Initial Y position')
-    z_arg = DeclareLaunchArgument('z', default_value='0.1',
-                                  description='Initial Z position')
-    roll_arg = DeclareLaunchArgument('R', default_value='0.0',
-                                     description='Initial Roll')
-    pitch_arg = DeclareLaunchArgument('P', default_value='0.0',
-                                      description='Initial Pitch')
-    yaw_arg = DeclareLaunchArgument('Y', default_value='0.0',
-                                    description='Initial Yaw (theta)')
-
-    # ---- Launch arguments: control goals ----
+    use_pi_mode_arg = DeclareLaunchArgument(
+        'use_pi_mode', default_value='true',
+        description='Use PI control mode on Arduino'
+    )
     desired_speed_arg = DeclareLaunchArgument(
         'desired_speed', default_value='0.5',
         description='Goal speed [m/s]'
     )
     desired_y_arg = DeclareLaunchArgument(
         'desired_y', default_value='0.0',
-        description='Goal lateral position (lane) [m]'
+        description='Goal lateral position [m]'
     )
     desired_heading_arg = DeclareLaunchArgument(
         'desired_heading', default_value='0.0',
         description='Goal heading [rad]'
     )
-
-    # ---- Launch arguments: PI gains ----
     kp_arg = DeclareLaunchArgument('kp', default_value='1.0',
                                    description='PI proportional gain')
     ki_arg = DeclareLaunchArgument('ki', default_value='0.1',
                                    description='PI integral gain')
-
-    # ---- Launch arguments: Stanley gain ----
     k_stanley_arg = DeclareLaunchArgument(
         'k_stanley', default_value='2.5',
         description='Stanley cross-track gain'
     )
 
-    # ---- Include Gazebo vehicle launch ----
-    gazebo_pkg = get_package_share_directory('gazebo_ackermann_steering_vehicle')
-    vehicle_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(gazebo_pkg, 'launch', 'vehicle.launch.py')
-        ),
-        launch_arguments={
-            'world': LaunchConfiguration('world'),
-            'x': LaunchConfiguration('x'),
-            'y': LaunchConfiguration('y'),
-            'z': LaunchConfiguration('z'),
-            'R': LaunchConfiguration('R'),
-            'P': LaunchConfiguration('P'),
-            'Y': LaunchConfiguration('Y'),
-        }.items()
-    )
-
-    # ---- Simulation bridge node (extended) ----
-    sim_bridge_node = Node(
-        package='zooba_simulation',
-        executable='sim_bridge_node',
-        name='sim_bridge_node',
+    # ---- Low-level controller node ----
+    low_level_node = Node(
+        package='low_level_controller',
+        executable='low_level_controller_node',
+        name='low_level_controller_node',
         output='screen',
         parameters=[{
-            'input_topic': '/vehicle/cmd',
-            'steering_topic': '/steering_angle',
-            'velocity_topic': '/velocity',
-            'state_topic': '/vehicle/state',
+            'serial_port': LaunchConfiguration('serial_port'),
+            'baud_rate': 115200,
+            'max_velocity': 0.249,       # max ~ 71.95 RPM × 2π×0.033/60
+            'wheel_radius': 0.033,       # 33 mm wheel
+            'servo_center': 90,
+            'servo_min': 45,
+            'servo_max': 135,
+            'max_steering_angle': 30.0,
+            'cmd_topic': '/vehicle/cmd',
             'feedback_topic': '/vehicle/feedback',
-            'wheel_radius': 0.04,
+            'imu_topic': '/vehicle/imu',
+            'use_pi_mode': LaunchConfiguration('use_pi_mode'),
+            'gear_ratio': 124.333,       # 44.727 (internal) × 2.7798 (herringbone 45.45/16.35)
+        }],
+    )
+
+    # ---- Odometry node ----
+    odometry_node = Node(
+        package='mid_level_controller',
+        executable='odometry_node',
+        name='odometry_node',
+        output='screen',
+        parameters=[{
             'wheelbase': 0.22,
+            'wheel_radius': 0.033,       # 33 mm wheel
+            'encoder_cpr': 5471,         # 44 × 44.727 × (45.45/16.35) = 44 × 124.333
+            'use_imu_heading': True,
+            'source': 'hardware',
+            'feedback_topic': '/vehicle/feedback',
+            'imu_topic': '/vehicle/imu',
+            'state_topic': '/vehicle/state',
             'publish_rate': 20.0,
         }],
     )
@@ -124,7 +113,7 @@ def generate_launch_description():
             'desired_speed': LaunchConfiguration('desired_speed'),
             'kp': LaunchConfiguration('kp'),
             'ki': LaunchConfiguration('ki'),
-            'max_velocity': 2.0,
+            'max_velocity': 0.249,       # physical max ~0.249 m/s
             'control_rate': 20.0,
             'state_topic': '/vehicle/state',
             'output_topic': '/teleop/speed_cmd',
@@ -142,7 +131,7 @@ def generate_launch_description():
             'desired_heading': LaunchConfiguration('desired_heading'),
             'k_stanley': LaunchConfiguration('k_stanley'),
             'k_soft': 1.0,
-            'max_steering_angle': 35.0,
+            'max_steering_angle': 30.0,
             'control_rate': 20.0,
             'state_topic': '/vehicle/state',
             'output_topic': '/teleop/lateral_cmd',
@@ -177,15 +166,13 @@ def generate_launch_description():
 
     return LaunchDescription([
         # Arguments
-        world_arg,
-        x_arg, y_arg, z_arg,
-        roll_arg, pitch_arg, yaw_arg,
+        serial_port_arg,
+        use_pi_mode_arg,
         desired_speed_arg, desired_y_arg, desired_heading_arg,
         kp_arg, ki_arg, k_stanley_arg,
-        # Gazebo
-        vehicle_launch,
-        # Bridge
-        sim_bridge_node,
+        # Hardware
+        low_level_node,
+        odometry_node,
         # Controllers
         speed_control_node,
         lateral_control_node,

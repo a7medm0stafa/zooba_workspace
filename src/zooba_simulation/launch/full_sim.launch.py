@@ -1,10 +1,11 @@
 """
-Full simulation stack launch file for manual teleop control.
+Full simulation stack launch file.
 
-Launches:
-    - gazebo_ackermann_steering_vehicle vehicle.launch.py (Gazebo + vehicle model)
-    - sim_bridge_node (VehicleCmd → Float64 conversion)
-    - teleop_keyboard_node (keyboard → /vehicle/cmd)
+Launches everything needed to teleop the vehicle in Gazebo:
+    - Gazebo simulation with Ackermann vehicle model
+    - Simulation bridge node (VehicleCmd → Gazebo topics)
+    - Teleop keyboard node (keyboard → raw commands)
+    - Non-holonomic constraints node (raw → constrained commands)
 
 Usage:
     ros2 launch zooba_simulation full_sim.launch.py
@@ -17,7 +18,6 @@ from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch_ros.actions import Node
 
 
 def generate_launch_description():
@@ -28,50 +28,36 @@ def generate_launch_description():
         description='Gazebo world file'
     )
 
-    # ---- Include the upstream vehicle launch ----
-    gazebo_pkg = get_package_share_directory('gazebo_ackermann_steering_vehicle')
-    vehicle_launch = IncludeLaunchDescription(
+    teleop_type_arg = DeclareLaunchArgument(
+        'teleop_type', default_value='keyboard',
+        description='Type of teleop to run (keyboard or joy)'
+    )
+
+    # ---- Include simulation launch (Gazebo + bridge) ----
+    sim_pkg = get_package_share_directory('zooba_simulation')
+    simulation_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(gazebo_pkg, 'launch', 'vehicle.launch.py')
+            os.path.join(sim_pkg, 'launch', 'simulation.launch.py')
         ),
         launch_arguments={
             'world': LaunchConfiguration('world'),
         }.items()
     )
 
-    # ---- Simulation bridge node ----
-    sim_bridge_node = Node(
-        package='zooba_simulation',
-        executable='sim_bridge_node',
-        name='sim_bridge_node',
-        output='screen',
-        parameters=[{
-            'input_topic': '/vehicle/cmd',
-            'steering_topic': '/steering_angle',
-            'velocity_topic': '/velocity',
-        }],
-    )
-
-    # ---- Teleop node (publishes directly to /vehicle/cmd) ----
-    teleop_node = Node(
-        package='mid_level_controller',
-        executable='teleop_keyboard_node',
-        name='teleop_keyboard_node',
-        output='screen',
-        prefix='xterm -e',
-        parameters=[{
-            'output_topic': '/vehicle/cmd',
-            'publish_rate': 10.0,
-            'velocity_step': 0.1,
-            'heading_step': 5.0,
-            'max_velocity': 2.0,
-            'max_heading': 35.0,
-        }],
+    # ---- Include mid-level controller launch (teleop + constraints) ----
+    mid_pkg = get_package_share_directory('mid_level_controller')
+    mid_level_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(mid_pkg, 'launch', 'mid_level_controller.launch.py')
+        ),
+        launch_arguments={
+            'teleop_type': LaunchConfiguration('teleop_type'),
+        }.items()
     )
 
     return LaunchDescription([
         world_arg,
-        vehicle_launch,
-        sim_bridge_node,
-        teleop_node,
+        teleop_type_arg,
+        simulation_launch,
+        mid_level_launch,
     ])

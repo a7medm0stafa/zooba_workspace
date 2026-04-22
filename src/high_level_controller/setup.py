@@ -2,7 +2,7 @@ import os
 from glob import glob
 from setuptools import find_packages, setup
 
-package_name = 'mid_level_controller'
+package_name = 'high_level_controller'
 
 setup(
     name=package_name,
@@ -23,7 +23,7 @@ setup(
     zip_safe=True,
     maintainer='ahmed',
     maintainer_email='ahm.mostafa03@gmail.com',
-    description='Mid-level controller: keyboard teleop and non-holonomic constraint enforcement for Ackermann-steered vehicle',
+    description='High-level autonomous controller: reacts to perception and issues driving commands',
     license='MIT',
     extras_require={
         'test': [
@@ -32,14 +32,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'teleop_keyboard_node = mid_level_controller.teleop_keyboard_node:main',
-            'teleop_joy_node = mid_level_controller.teleop_joy_node:main',
-            'nonholonomic_constraints_node = mid_level_controller.nonholonomic_constraints_node:main',
-            'open_loop_node = mid_level_controller.open_loop_node:main',
-            'speed_control_node = mid_level_controller.speed_control_node:main',
-            'lateral_control_node = mid_level_controller.lateral_control_node:main',
-            'control_merger_node = mid_level_controller.control_merger_node:main',
-            'odometry_node = mid_level_controller.odometry_node:main',
+            'traffic_light_controller_node = high_level_controller.traffic_light_controller_node:main',
+            'command_arbiter_node = high_level_controller.command_arbiter_node:main',
         ],
     },
 )

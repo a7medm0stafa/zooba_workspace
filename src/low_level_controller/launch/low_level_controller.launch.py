@@ -26,12 +26,12 @@ def generate_launch_description():
         description='Serial baud rate'
     )
     max_velocity_arg = DeclareLaunchArgument(
-        'max_velocity', default_value='1.0',
-        description='Maximum velocity in m/s'
+        'max_velocity', default_value='0.20',
+        description='Maximum velocity in m/s (physical max ~0.20 m/s)'
     )
     wheel_radius_arg = DeclareLaunchArgument(
         'wheel_radius', default_value='0.033',
-        description='Wheel radius in meters (for velocity ↔ RPM conversion)'
+        description='Wheel radius in meters (33 mm wheel)'
     )
     servo_center_arg = DeclareLaunchArgument(
         'servo_center', default_value='90',
@@ -61,6 +61,10 @@ def generate_launch_description():
         'feedback_topic', default_value='/vehicle/feedback',
         description='Topic name for encoder feedback'
     )
+    use_pi_mode_arg = DeclareLaunchArgument(
+        'use_pi_mode', default_value='true',
+        description='Set to false to run the node in open-loop (PWM) mode'
+    )
 
     # Node
     low_level_node = Node(
@@ -80,6 +84,7 @@ def generate_launch_description():
             'watchdog_timeout': LaunchConfiguration('watchdog_timeout'),
             'cmd_topic': LaunchConfiguration('cmd_topic'),
             'feedback_topic': LaunchConfiguration('feedback_topic'),
+            'use_pi_mode': LaunchConfiguration('use_pi_mode'),
         }],
     )
 
@@ -95,5 +100,6 @@ def generate_launch_description():
         watchdog_arg,
         cmd_topic_arg,
         feedback_topic_arg,
+        use_pi_mode_arg,
         low_level_node,
     ])

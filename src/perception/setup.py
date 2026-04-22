@@ -1,3 +1,5 @@
+import os
+from glob import glob
 from setuptools import find_packages, setup
 
 package_name = 'perception'
@@ -10,6 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -26,6 +29,10 @@ setup(
         'console_scripts': [
             'sign_detection_node = perception.nodes.sign_detection_node:main',
             'vehicle_actuator_node = perception.nodes.vehicle_actuator_node:main',
+            'traffic_light_detector_node = perception.nodes.traffic_light_detector_node:main',
+            'camera_publisher = perception.nodes.camera_publisher_node:main',
+            'dashboard_node = perception.nodes.dashboard_node:main',
+            'debug_viewer = perception.nodes.debug_viewer:main',
         ],
     },
 )

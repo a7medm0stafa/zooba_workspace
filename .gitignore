@@ -15,3 +15,6 @@ env/
 __pycache__/
 *.pyc
 *.pyo
+
+# Local config overrides (edit freely, never committed)
+*.local.yaml
