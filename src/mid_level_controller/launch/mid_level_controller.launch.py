@@ -41,7 +41,6 @@ def generate_launch_description():
         executable='teleop_keyboard_node',
         name='teleop_keyboard_node',
         output='screen',
-        prefix='xterm -e',
         condition=IfCondition(PythonExpression(["'", LaunchConfiguration('teleop_type'), "' == 'keyboard'"])),
         parameters=[{
             'output_topic': '/teleop/raw_cmd',
