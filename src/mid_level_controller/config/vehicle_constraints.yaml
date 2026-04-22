@@ -14,7 +14,7 @@ nonholonomic_constraints_node:
     # Total ratio          = 44.727 x 2.7798 = 124.333
     # Max output shaft RPM = 200 / 2.7798 = 71.95 RPM
     # Max linear velocity  = 71.95 * 2*pi*0.033 / 60 = 0.249 m/s
-    max_velocity: 0.249      # Maximum forward/reverse speed [m/s]
+    max_velocity: 0.20      # Maximum forward/reverse speed [m/s]
     max_velocity_rate: 0.5   # Maximum acceleration [m/s²]
 
     # Steering constraints

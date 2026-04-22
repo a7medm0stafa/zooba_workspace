@@ -41,13 +41,14 @@ def generate_launch_description():
         executable='teleop_keyboard_node',
         name='teleop_keyboard_node',
         output='screen',
+        prefix='xterm -e',
         condition=IfCondition(PythonExpression(["'", LaunchConfiguration('teleop_type'), "' == 'keyboard'"])),
         parameters=[{
             'output_topic': '/teleop/raw_cmd',
             'publish_rate': 10.0,
-            'velocity_step': 0.05,   # smaller step suits low-speed vehicle
+            'velocity_step': 0.05,
             'heading_step': 5.0,
-            'max_velocity': 0.249,   # physical max
+            'max_velocity': 0.20,
             'max_heading': 45.0,
         }],
     )
@@ -73,7 +74,7 @@ def generate_launch_description():
         condition=IfCondition(PythonExpression(["'", LaunchConfiguration('teleop_type'), "' == 'joy'"])),
         parameters=[{
             'output_topic': '/teleop/raw_cmd',
-            'max_velocity': 0.249,   # physical max
+            'max_velocity': 0.20,   # physical max
             'max_heading': 45.0,
             'axis_steering': 0,
             'axis_forward': 5, # R2/RT
