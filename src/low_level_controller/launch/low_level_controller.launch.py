@@ -61,6 +61,10 @@ def generate_launch_description():
         'feedback_topic', default_value='/vehicle/feedback',
         description='Topic name for encoder feedback'
     )
+    use_pi_mode_arg = DeclareLaunchArgument(
+        'use_pi_mode', default_value='true',
+        description='Set to false to run the node in open-loop (PWM) mode'
+    )
 
     # Node
     low_level_node = Node(
@@ -80,6 +84,7 @@ def generate_launch_description():
             'watchdog_timeout': LaunchConfiguration('watchdog_timeout'),
             'cmd_topic': LaunchConfiguration('cmd_topic'),
             'feedback_topic': LaunchConfiguration('feedback_topic'),
+            'use_pi_mode': LaunchConfiguration('use_pi_mode'),
         }],
     )
 
@@ -95,5 +100,6 @@ def generate_launch_description():
         watchdog_arg,
         cmd_topic_arg,
         feedback_topic_arg,
+        use_pi_mode_arg,
         low_level_node,
     ])
