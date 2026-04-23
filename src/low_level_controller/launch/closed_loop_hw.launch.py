@@ -75,7 +75,7 @@ def generate_launch_description():
             'servo_center': 90,
             'servo_min': 45,
             'servo_max': 135,
-            'max_steering_angle': 30.0,
+            'max_steering_angle': 45.0,
             'cmd_topic': '/vehicle/cmd',
             'feedback_topic': '/vehicle/feedback',
             'imu_topic': '/vehicle/imu',
@@ -113,7 +113,7 @@ def generate_launch_description():
             'desired_speed': LaunchConfiguration('desired_speed'),
             'kp': LaunchConfiguration('kp'),
             'ki': LaunchConfiguration('ki'),
-            'max_velocity': 0.249,       # physical max ~0.249 m/s
+            'max_velocity': 0.21,       # physical max ~0.249 m/s
             'control_rate': 20.0,
             'state_topic': '/vehicle/state',
             'output_topic': '/teleop/speed_cmd',
@@ -132,7 +132,7 @@ def generate_launch_description():
             'desired_heading': LaunchConfiguration('desired_heading'),
             'k_stanley': LaunchConfiguration('k_stanley'),
             'k_soft': 1.0,
-            'max_steering_angle': 30.0,
+            'max_steering_angle': 45.0,
             'control_rate': 20.0,
             'state_topic': '/vehicle/state',
             'output_topic': '/teleop/lateral_cmd',

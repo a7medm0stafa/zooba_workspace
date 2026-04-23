@@ -15,7 +15,7 @@ lateral_control_node:
   ros__parameters:
     desired_y: 0.0            # Target lateral position (lane) [m]
     desired_heading: 0.0      # Target heading [rad] (0 = along X-axis)
-    k_stanley: 2.5            # Cross-track gain
+    k_stanley: 4            # Cross-track gain
     k_soft: 1.0               # Softening constant
     max_steering_angle: 35.0  # Steering saturation [degrees]
     control_rate: 20.0        # Control loop rate [Hz]
