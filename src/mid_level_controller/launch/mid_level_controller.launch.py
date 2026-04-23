@@ -46,15 +46,10 @@ def generate_launch_description():
         parameters=[{
             'output_topic': '/teleop/raw_cmd',
             'publish_rate': 10.0,
-<<<<<<< HEAD
             'velocity_step': 0.05,
             'heading_step': 5.0,
             'max_velocity': 0.20,
-=======
-            'velocity_step': 2.0,    # instantly hit max speed on 1 key press!
-            'heading_step': 5.0,
-            'max_velocity': 2.0,     # physical max
->>>>>>> d110617 (chore: update velocity parameters for keyboard and joystick teleoperation modes)
+
             'max_heading': 45.0,
         }],
     )
@@ -80,13 +75,10 @@ def generate_launch_description():
         condition=IfCondition(PythonExpression(["'", LaunchConfiguration('teleop_type'), "' == 'joy'"])),
         parameters=[{
             'output_topic': '/teleop/raw_cmd',
-<<<<<<< HEAD
+
             'max_velocity': 0.20,   # physical max
-	    'max_heading': 45.0,
-=======
-            'max_velocity': 0.249,   # physical max
-            'max_heading': 45.0,
->>>>>>> d110617 (chore: update velocity parameters for keyboard and joystick teleoperation modes)
+	        'max_heading': 45.0,
+
             'axis_steering': 0,
             'axis_forward': 5, # R2/RT
             'axis_reverse': 2, # L2/LT
