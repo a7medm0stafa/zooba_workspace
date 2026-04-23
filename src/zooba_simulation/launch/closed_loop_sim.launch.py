@@ -55,11 +55,11 @@ def generate_launch_description():
 
     # ---- Launch arguments: control goals ----
     desired_speed_arg = DeclareLaunchArgument(
-        'desired_speed', default_value='0.5',
+        'desired_speed', default_value='3.5',
         description='Goal speed [m/s]'
     )
     desired_y_arg = DeclareLaunchArgument(
-        'desired_y', default_value='0.0',
+        'desired_y', default_value='2.0',
         description='Goal lateral position (lane) [m]'
     )
     desired_heading_arg = DeclareLaunchArgument(
@@ -75,7 +75,7 @@ def generate_launch_description():
 
     # ---- Launch arguments: Stanley gain ----
     k_stanley_arg = DeclareLaunchArgument(
-        'k_stanley', default_value='2.5',
+        'k_stanley', default_value='3.5',
         description='Stanley cross-track gain'
     )
 
@@ -163,17 +163,17 @@ def generate_launch_description():
         }],
     )
 
-    # # ---- Non-holonomic constraints node ----
-    # mid_pkg = get_package_share_directory('mid_level_controller')
-    # constraints_config = os.path.join(mid_pkg, 'config', 'vehicle_constraints.yaml')
+    # ---- Non-holonomic constraints node ----
+    mid_pkg = get_package_share_directory('mid_level_controller')
+    constraints_config = os.path.join(mid_pkg, 'config', 'vehicle_constraints.yaml')
 
-    # constraints_node = Node(
-    #     package='mid_level_controller',
-    #     executable='nonholonomic_constraints_node',
-    #     name='nonholonomic_constraints_node',
-    #     output='screen',
-    #     parameters=[constraints_config],
-    # )
+    constraints_node = Node(
+        package='mid_level_controller',
+        executable='nonholonomic_constraints_node',
+        name='nonholonomic_constraints_node',
+        output='screen',
+        parameters=[constraints_config],
+    )
 
     return LaunchDescription([
         # Arguments
@@ -191,5 +191,5 @@ def generate_launch_description():
         lateral_control_node,
         merger_node,
         # Constraints
-        # constraints_node,
+        constraints_node,
     ])
