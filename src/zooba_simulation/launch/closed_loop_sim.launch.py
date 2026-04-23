@@ -122,6 +122,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'desired_speed': LaunchConfiguration('desired_speed'),
+            'bypass_pi': False,          # Sim uses the ROS 2 node's PI controller
             'kp': LaunchConfiguration('kp'),
             'ki': LaunchConfiguration('ki'),
             'max_velocity': 2.0,
@@ -158,21 +159,9 @@ def generate_launch_description():
         parameters=[{
             'speed_topic': '/teleop/speed_cmd',
             'lateral_topic': '/teleop/lateral_cmd',
-            'output_topic': '/teleop/raw_cmd',
+            'output_topic': '/vehicle/cmd',
             'publish_rate': 20.0,
         }],
-    )
-
-    # ---- Non-holonomic constraints node ----
-    mid_pkg = get_package_share_directory('mid_level_controller')
-    constraints_config = os.path.join(mid_pkg, 'config', 'vehicle_constraints.yaml')
-
-    constraints_node = Node(
-        package='mid_level_controller',
-        executable='nonholonomic_constraints_node',
-        name='nonholonomic_constraints_node',
-        output='screen',
-        parameters=[constraints_config],
     )
 
     return LaunchDescription([
@@ -190,6 +179,4 @@ def generate_launch_description():
         speed_control_node,
         lateral_control_node,
         merger_node,
-        # Constraints
-        constraints_node,
     ])

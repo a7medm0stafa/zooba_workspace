@@ -39,7 +39,6 @@ setup(
             'speed_control_node = mid_level_controller.speed_control_node:main',
             'lateral_control_node = mid_level_controller.lateral_control_node:main',
             'control_merger_node = mid_level_controller.control_merger_node:main',
-            'odometry_node = mid_level_controller.odometry_node:main',
         ],
     },
 )

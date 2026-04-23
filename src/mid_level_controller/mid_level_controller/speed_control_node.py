@@ -33,6 +33,7 @@ class SpeedControlNode(Node):
 
         # ---- Parameters ----
         self.declare_parameter('desired_speed', 0.5)       # m/s
+        self.declare_parameter('bypass_pi', False)         # if True, bypass PI and just output desired_speed
         self.declare_parameter('kp', 1.0)
         self.declare_parameter('ki', 0.1)
         self.declare_parameter('max_velocity', 2.0)        # m/s saturation
@@ -41,6 +42,7 @@ class SpeedControlNode(Node):
         self.declare_parameter('output_topic', '/teleop/speed_cmd')
 
         self.desired_speed = self.get_parameter('desired_speed').value
+        self.bypass_pi = self.get_parameter('bypass_pi').value
         self.kp = self.get_parameter('kp').value
         self.ki = self.get_parameter('ki').value
         self.max_velocity = self.get_parameter('max_velocity').value
@@ -70,7 +72,8 @@ class SpeedControlNode(Node):
         self.add_on_set_parameters_callback(self._param_callback)
 
         self.get_logger().info('=' * 50)
-        self.get_logger().info('Speed Control Node Started (PI)')
+        self.get_logger().info('Speed Control Node Started')
+        self.get_logger().info(f'  Bypass PI     : {self.bypass_pi}')
         self.get_logger().info(f'  Desired speed : {self.desired_speed:.2f} m/s')
         self.get_logger().info(f'  Kp            : {self.kp}')
         self.get_logger().info(f'  Ki            : {self.ki}')
@@ -86,7 +89,10 @@ class SpeedControlNode(Node):
         for param in params:
             if param.name == 'desired_speed':
                 self.desired_speed = param.value
-                self.get_logger().info(f'[PI] desired_speed updated: {param.value:.2f} m/s')
+                self.get_logger().info(f'[PI/Bypass] desired_speed updated: {param.value:.2f} m/s')
+            elif param.name == 'bypass_pi':
+                self.bypass_pi = param.value
+                self.get_logger().info(f'[PI/Bypass] bypass_pi updated: {param.value}')
             elif param.name == 'kp':
                 self.kp = param.value
             elif param.name == 'ki':
@@ -103,6 +109,20 @@ class SpeedControlNode(Node):
         now = self.get_clock().now()
         dt = (now - self.last_time).nanoseconds * 1e-9
         self.last_time = now
+
+        msg = Float64()
+
+        if self.bypass_pi:
+            # Bypass PI completely, just forward the state
+            output = max(-self.max_velocity, min(self.max_velocity, self.desired_speed))
+            msg.data = output
+            self.cmd_pub.publish(msg)
+
+            self.get_logger().info(
+                f'[Bypass] out={output:.3f} des={self.desired_speed:.3f}',
+                throttle_duration_sec=2.0
+            )
+            return
 
         if dt <= 0.0 or dt > 1.0:
             dt = 0.05
@@ -121,7 +141,6 @@ class SpeedControlNode(Node):
         output = max(-self.max_velocity, min(self.max_velocity, output))
 
         # Publish
-        msg = Float64()
         msg.data = output
         self.cmd_pub.publish(msg)
 

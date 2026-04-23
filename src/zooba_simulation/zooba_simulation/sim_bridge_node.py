@@ -179,8 +179,7 @@ class SimBridgeNode(Node):
     def _tf_callback(self, msg: TFMessage):
         """Extract body_link pose from TF for ground-truth position."""
         for transform in msg.transforms:
-            if transform.child_frame_id == 'body_link' or \
-               transform.child_frame_id == 'base_link':
+            if transform.child_frame_id in ['body_link', 'base_link', 'ackermann_steering_vehicle']:
                 t = transform.transform.translation
                 q = transform.transform.rotation
 

@@ -86,7 +86,7 @@ def generate_launch_description():
 
     # ---- Odometry node ----
     odometry_node = Node(
-        package='mid_level_controller',
+        package='localization',
         executable='odometry_node',
         name='odometry_node',
         output='screen',
@@ -111,6 +111,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'desired_speed': LaunchConfiguration('desired_speed'),
+            'bypass_pi': True,           # Hardware firmware uses its own PI
             'kp': LaunchConfiguration('kp'),
             'ki': LaunchConfiguration('ki'),
             'max_velocity': 0.249,       # physical max ~0.249 m/s
