@@ -17,7 +17,7 @@ setup(
             glob(os.path.join('launch', '*launch.[pxy][yma]*'))),
         # Include config files
         (os.path.join('share', package_name, 'config'),
-            glob(os.path.join('config', '*.yaml'))),
+            glob(os.path.join('config', '*.yaml')) + glob(os.path.join('config', '*.rviz'))),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -33,6 +33,7 @@ setup(
     entry_points={
         'console_scripts': [
             'sim_bridge_node = zooba_simulation.sim_bridge_node:main',
+            'rviz_vehicle_node = zooba_simulation.rviz_vehicle_node:main',
         ],
     },
 )
