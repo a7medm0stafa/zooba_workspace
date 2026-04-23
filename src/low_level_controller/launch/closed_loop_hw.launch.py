@@ -117,6 +117,7 @@ def generate_launch_description():
             'control_rate': 20.0,
             'state_topic': '/vehicle/state',
             'output_topic': '/teleop/speed_cmd',
+            'bypass_pi': True,           # Hardware uses Arduino PI, bypass ROS PI
         }],
     )
 

@@ -39,6 +39,7 @@ class SpeedControlNode(Node):
         self.declare_parameter('control_rate', 20.0)       # Hz
         self.declare_parameter('state_topic', '/vehicle/state')
         self.declare_parameter('output_topic', '/teleop/speed_cmd')
+        self.declare_parameter('bypass_pi', False)         # Bypass ROS PI logic (pass-through)
 
         self.desired_speed = self.get_parameter('desired_speed').value
         self.kp = self.get_parameter('kp').value
@@ -47,6 +48,7 @@ class SpeedControlNode(Node):
         control_rate = self.get_parameter('control_rate').value
         state_topic = self.get_parameter('state_topic').value
         output_topic = self.get_parameter('output_topic').value
+        self.bypass_pi = self.get_parameter('bypass_pi').value
 
         # ---- PI State ----
         self.integral = 0.0
@@ -78,6 +80,7 @@ class SpeedControlNode(Node):
         self.get_logger().info(f'  Control rate  : {control_rate:.0f} Hz')
         self.get_logger().info(f'  State topic   : {state_topic}')
         self.get_logger().info(f'  Output topic  : {output_topic}')
+        self.get_logger().info(f'  Bypass PI     : {self.bypass_pi}')
         self.get_logger().info('=' * 50)
 
     def _param_callback(self, params):
@@ -106,6 +109,22 @@ class SpeedControlNode(Node):
 
         if dt <= 0.0 or dt > 1.0:
             dt = 0.05
+
+        if self.bypass_pi:
+            output = self.desired_speed
+            self.integral = 0.0  # Keep integral zeroed
+            
+            # Publish
+            msg = Float64()
+            msg.data = output
+            self.cmd_pub.publish(msg)
+
+            # Log (throttled)
+            self.get_logger().info(
+                f'[PI BYPASS] Forwarding des={self.desired_speed:.3f} directly to output',
+                throttle_duration_sec=2.0
+            )
+            return
 
         # Error
         error = self.desired_speed - self.current_velocity
