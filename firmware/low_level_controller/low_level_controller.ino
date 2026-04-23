@@ -583,6 +583,10 @@ void sendFeedback()
     Serial.print(angle_deg, 2);
 
     Serial.println();
+
+    // Send the current physical PWM value for debugging
+    Serial.print("PWM:");
+    Serial.println(currentPWM);
 }
 
 // ==================== Helper ====================

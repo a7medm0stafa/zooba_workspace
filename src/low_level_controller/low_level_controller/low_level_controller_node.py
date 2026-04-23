@@ -178,6 +178,8 @@ class LowLevelControllerNode(Node):
                     self.get_logger().info('Arduino IMU initialized successfully')
                 elif line.startswith('IMU_ERR:'):
                     self.get_logger().warn(f'Arduino IMU error: {line}')
+                elif line.startswith('PWM:'):
+                    self.get_logger().info(f'Arduino -> Motor PWM: {line[4:]} / 255')
                 else:
                     self.get_logger().debug(f'Arduino: {line}')
 
