@@ -1,27 +1,24 @@
 """
-Lateral Control Node — Stanley Controller
-===========================================
-Closed-loop lateral controller using the Stanley method to steer the
+Lateral Control Node — Extended Stanley Controller
+====================================================
+Closed-loop lateral controller using the extended Stanley method to steer the
 vehicle towards a desired lateral position (lane).
 
-The Stanley controller operates at the front axle and combines:
-  1. Heading error correction
-  2. Cross-track error correction (proportional to atan of lateral offset)
-
-Stanley Law:
-    δ = (ψ_desired - ψ) + atan2(k * e_cte, k_soft + v)
+Extended Stanley Law (with heading derivative damping):
+    δ = heading_error + k_d * d(heading_error)/dt + atan2(k_stanley * e_cte, k_soft + |v|)
 
 Where:
-    ψ_desired = desired heading [rad]
-    ψ         = current heading [rad]
-    e_cte     = cross-track error (desired_y - y) [m]
-    k         = cross-track gain
-    k_soft    = softening constant to avoid div-by-zero at low speed
-    v         = current longitudinal velocity [m/s]
+    e_cte              = desired_y - current_y   (cross-track error)
+    heading_error      = desired_heading - current_yaw
+    d(heading_error)/dt= rate of change of heading error (damping term)
+    k_stanley          = cross-track gain
+    k_soft             = softening constant (avoids div-by-zero at low speed)
+    k_d_heading        = heading derivative damping gain
+    v                  = current longitudinal speed [m/s]
 
-Reference:
-    Comparison of lateral controllers for autonomous vehicle
-    https://hal.archives-ouvertes.fr/hal-02459398/document
+The derivative term prevents heading overshoot during lane changes: when the
+heading error is decreasing quickly (approaching 0°) the derivative produces
+a counter-steering correction that slows the heading rate before it crosses 0°.
 
 Subscribes:
     /vehicle/state  (vehicle_interfaces/VehicleState)
@@ -48,6 +45,7 @@ class LateralControlNode(Node):
         self.declare_parameter('desired_heading', 0.0)         # target heading [rad]
         self.declare_parameter('k_stanley', 2.5)               # cross-track gain
         self.declare_parameter('k_soft', 1.0)                  # softening constant
+        self.declare_parameter('k_d_heading', 0.5)             # heading derivative damping
         self.declare_parameter('max_steering_angle', 35.0)     # degrees
         self.declare_parameter('control_rate', 20.0)           # Hz
         self.declare_parameter('state_topic', '/vehicle/state')
@@ -57,6 +55,7 @@ class LateralControlNode(Node):
         self.desired_heading = self.get_parameter('desired_heading').value
         self.k_stanley = self.get_parameter('k_stanley').value
         self.k_soft = self.get_parameter('k_soft').value
+        self.k_d_heading = self.get_parameter('k_d_heading').value
         self.max_steering_angle = self.get_parameter('max_steering_angle').value
         control_rate = self.get_parameter('control_rate').value
         state_topic = self.get_parameter('state_topic').value
@@ -67,6 +66,10 @@ class LateralControlNode(Node):
         self.current_y = 0.0
         self.current_yaw = 0.0
         self.current_velocity = 0.0
+
+        # ---- Derivative state for heading damping ----
+        self.prev_heading_error = 0.0
+        self.last_time = self.get_clock().now()
 
         # ---- Subscriber ----
         self.state_sub = self.create_subscription(
@@ -82,11 +85,12 @@ class LateralControlNode(Node):
         self.add_on_set_parameters_callback(self._param_callback)
 
         self.get_logger().info('=' * 55)
-        self.get_logger().info('Lateral Control Node Started (Stanley)')
+        self.get_logger().info('Lateral Control Node Started (Extended Stanley)')
         self.get_logger().info(f'  Desired Y       : {self.desired_y:.2f} m')
         self.get_logger().info(f'  Desired heading : {self.desired_heading:.3f} rad')
         self.get_logger().info(f'  k_stanley       : {self.k_stanley}')
         self.get_logger().info(f'  k_soft          : {self.k_soft}')
+        self.get_logger().info(f'  k_d_heading     : {self.k_d_heading}')
         self.get_logger().info(f'  Max steering    : ±{self.max_steering_angle:.1f}°')
         self.get_logger().info(f'  Control rate    : {control_rate:.0f} Hz')
         self.get_logger().info(f'  State topic     : {state_topic}')
@@ -99,14 +103,18 @@ class LateralControlNode(Node):
         for param in params:
             if param.name == 'desired_y':
                 self.desired_y = param.value
+                self.prev_heading_error = 0.0   # reset derivative on setpoint change
                 self.get_logger().info(f'[Stanley] desired_y updated: {param.value:.2f} m')
             elif param.name == 'desired_heading':
                 self.desired_heading = param.value
+                self.prev_heading_error = 0.0
                 self.get_logger().info(f'[Stanley] desired_heading updated: {param.value:.3f} rad')
             elif param.name == 'k_stanley':
                 self.k_stanley = param.value
             elif param.name == 'k_soft':
                 self.k_soft = param.value
+            elif param.name == 'k_d_heading':
+                self.k_d_heading = param.value
         return SetParametersResult(successful=True)
 
     def _state_callback(self, msg: VehicleState):
@@ -117,41 +125,45 @@ class LateralControlNode(Node):
         self.current_velocity = msg.velocity
 
     def _control_callback(self):
-        """Stanley control loop — compute and publish steering command."""
-        # --- Heading error ---
+        """Extended Stanley control loop — compute and publish steering command."""
+        # --- dt for derivative term ---
+        now = self.get_clock().now()
+        dt = (now - self.last_time).nanoseconds * 1e-9
+        self.last_time = now
+        if dt <= 0.0 or dt > 1.0:
+            dt = 0.05
+
+        # --- Heading error (normalised to [-π, π]) ---
         heading_error = self._normalize_angle(self.desired_heading - self.current_yaw)
 
+        # --- Derivative of heading error (damping) ---
+        d_heading = self._normalize_angle(heading_error - self.prev_heading_error) / dt
+        self.prev_heading_error = heading_error
+
         # --- Cross-track error ---
-        # For straight-line following along X axis with desired lateral offset Y:
         cross_track_error = self.desired_y - self.current_y
 
-        # --- Stanley law ---
-        # δ = heading_error + atan2(k * e_cte, k_soft + |v|)
-        v = abs(self.current_velocity) if abs(self.current_velocity) > 0.01 else 0.01
-        cross_track_term = math.atan2(
-            self.k_stanley * cross_track_error,
-            self.k_soft + v
-        )
+        # --- Extended Stanley law (+ heading derivative damping) ---
+        v = max(abs(self.current_velocity), 0.01)
+        cross_track_term = math.atan2(self.k_stanley * cross_track_error, self.k_soft + v)
+        heading_damp_term = self.k_d_heading * d_heading
+        steering_rad = heading_error + heading_damp_term + cross_track_term
 
-        # Total steering angle (radians)
-        steering_rad = heading_error + cross_track_term
-
-        # Convert to degrees and negate to match VehicleCmd convention (+right, -left)
-        steering_deg = math.degrees(steering_rad)
-
-        # Saturate
+        # Convert to degrees and negate (VehicleCmd: +right, Stanley: +left)
+        steering_deg = -math.degrees(steering_rad)
         steering_deg = max(-self.max_steering_angle,
                            min(self.max_steering_angle, steering_deg))
 
         # Publish
         msg = Float64()
-        msg.data = steering_deg
+        msg.data = float(steering_deg)
         self.cmd_pub.publish(msg)
 
         # Log (throttled)
         self.get_logger().info(
             f'[Stanley] cte={cross_track_error:.3f}m '
             f'he={math.degrees(heading_error):.1f}° '
+            f'damp={math.degrees(heading_damp_term):.1f}° '
             f'ct={math.degrees(cross_track_term):.1f}° '
             f'δ={steering_deg:.1f}° '
             f'pos=({self.current_x:.2f},{self.current_y:.2f}) '
