@@ -184,29 +184,29 @@ def generate_launch_description():
     # ================================================================
     # ---- 2b. EKF Localization (simulation mode — uses joint_states) -
     # ================================================================
-    # ekf_localization = Node(
-    #     package='localization',
-    #     executable='ekf_localization_node',
-    #     name='ekf_localization_node',
-    #     output='screen',
-    #     parameters=[{
-    #         'source': 'simulation',
-    #         'wheelbase': 0.22,
-    #         'wheel_radius': 0.04,
-    #         'state_topic': '/vehicle/state',
-    #         'publish_rate': 50.0,
-    #         # Simulation: lower noise since Gazebo joints are clean
-    #         'process_noise_x': 0.005,
-    #         'process_noise_y': 0.005,
-    #         'process_noise_yaw': 0.002,
-    #         'process_noise_vel': 0.05,
-    #         'process_noise_gyro_bias': 0.0001,
-    #         'encoder_velocity_noise': 0.02,
-    #         'gyro_rate_noise': 0.005,
-    #         'imu_yaw_noise': 0.1,
-    #         'zupt_velocity_threshold': 0.01,
-    #     }],
-    # )
+    ekf_localization = Node(
+        package='localization',
+        executable='ekf_localization_node',
+        name='ekf_localization_node',
+        output='screen',
+        parameters=[{
+            'source': 'simulation',
+            'wheelbase': 0.22,
+            'wheel_radius': 0.04,
+            'state_topic': '/vehicle/state',
+            'publish_rate': 50.0,
+            # Simulation: lower noise since Gazebo joints are clean
+            'process_noise_x': 0.005,
+            'process_noise_y': 0.005,
+            'process_noise_yaw': 0.002,
+            'process_noise_vel': 0.05,
+            'process_noise_gyro_bias': 0.0001,
+            'encoder_velocity_noise': 0.02,
+            'gyro_rate_noise': 0.005,
+            'imu_yaw_noise': 0.1,
+            'zupt_velocity_threshold': 0.01,
+        }],
+    )
 
     # ================================================================
     # ---- 2b_gt. Ground Truth Localization (for comparison) ---------
@@ -326,7 +326,7 @@ def generate_launch_description():
         # --- then launch everything ---
         vehicle_launch,
         pose_bridge,
-        # ekf_localization,
+        ekf_localization,
         ground_truth,
         sim_bridge,
         speed_control,
