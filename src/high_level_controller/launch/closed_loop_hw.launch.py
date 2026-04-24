@@ -1,23 +1,51 @@
 """
 Launch file for closed-loop control on hardware (Raspberry Pi + Arduino).
+==========================================================================
+FILE: high_level_controller/launch/closed_loop_hw.launch.py
+STATUS: MODIFIED — replaced dead-reckoning odometry with EKF localization
+MODIFIED: 2026-04-24
 
-Launches:
-    - Low-level controller node (serial to Arduino — PI or open-loop)
-    - Odometry node (encoder + IMU → VehicleState)
-    - Speed control node (PI controller)
-    - Lateral control node (Stanley controller)
-    - Control merger node (speed + lateral → VehicleCmd)
-    - Non-holonomic constraints node
+CHANGES MADE:
+    - REPLACED: mid_level_controller/odometry_node (dead-reckoning, yaw drift)
+    - WITH:     localization/ekf_localization_node (EKF, gyro bias + ZUPT)
+    - The EKF node runs at 50 Hz (was 20 Hz) for better estimation
+    - All EKF tuning parameters are set inline below
 
-Usage:
+WHAT THIS LAUNCHES:
+    1. Low-level controller node (serial to Arduino — PI or open-loop)
+    2. EKF Localization node (encoder + IMU → VehicleState, drift-corrected)
+    3. Speed control node (PI controller → /teleop/speed_cmd)
+    4. Lateral control node (Stanley controller → /teleop/lateral_cmd)
+    5. Control merger node (speed + lateral → /teleop/raw_cmd)
+    6. Non-holonomic constraints node (/teleop/raw_cmd → /vehicle/cmd)
+
+SIGNAL FLOW:
+    Arduino → /vehicle/feedback + /vehicle/imu
+           → EKF Localization Node → /vehicle/state
+           → Speed Control + Lateral Control → /teleop/speed_cmd + /teleop/lateral_cmd
+           → Control Merger → /teleop/raw_cmd
+           → Non-Holonomic Constraints → /vehicle/cmd
+           → Low-Level Controller → Arduino serial
+
+USAGE:
     # Default (PI mode on Arduino):
-    ros2 launch low_level_controller closed_loop_hw.launch.py
+    ros2 launch high_level_controller closed_loop_hw.launch.py
 
     # Custom speed goal:
-    ros2 launch low_level_controller closed_loop_hw.launch.py desired_speed:=0.8
+    ros2 launch high_level_controller closed_loop_hw.launch.py desired_speed:=0.8
+
+    # Custom lateral target:
+    ros2 launch high_level_controller closed_loop_hw.launch.py desired_y:=1.0
 
     # Open-loop mode (skip Arduino PI):
-    ros2 launch low_level_controller closed_loop_hw.launch.py use_pi_mode:=false
+    ros2 launch high_level_controller closed_loop_hw.launch.py use_pi_mode:=false
+
+ROLLBACK (revert to old dead-reckoning):
+    Change the odometry_node definition below from:
+        package='localization', executable='ekf_localization_node'
+    to:
+        package='mid_level_controller', executable='odometry_node'
+    And remove the EKF-specific parameters.
 """
 
 import os
@@ -92,22 +120,33 @@ def generate_launch_description():
         }],
     )
 
-    # ---- Odometry node ----
+    # ---- EKF Localization node (replaces dead-reckoning odometry) ----
     odometry_node = Node(
-        package='mid_level_controller',
-        executable='odometry_node',
-        name='odometry_node',
+        package='localization',
+        executable='ekf_localization_node',
+        name='ekf_localization_node',
         output='screen',
         parameters=[{
-            'wheelbase': 0.22,
-            'wheel_radius': 0.033,       # 33 mm wheel
-            'encoder_cpr': 5471,         # 44 × 44.727 × (45.45/16.35) = 44 × 124.333
-            'use_imu_heading': True,
             'source': 'hardware',
+            'wheelbase': 0.22,
+            'wheel_radius': 0.033,
+            'encoder_cpr': 5471,
             'feedback_topic': '/vehicle/feedback',
             'imu_topic': '/vehicle/imu',
             'state_topic': '/vehicle/state',
-            'publish_rate': 20.0,
+            'publish_rate': 50.0,
+            # EKF tuning (defaults are good starting points)
+            'process_noise_x': 0.01,
+            'process_noise_y': 0.01,
+            'process_noise_yaw': 0.005,
+            'process_noise_vel': 0.1,
+            'process_noise_gyro_bias': 0.0001,
+            'encoder_velocity_noise': 0.05,
+            'gyro_rate_noise': 0.01,
+            'imu_yaw_noise': 0.15,
+            'zupt_velocity_threshold': 0.02,
+            'zupt_noise': 0.001,
+            'imu_settle_time': 2.5,
         }],
     )
 
