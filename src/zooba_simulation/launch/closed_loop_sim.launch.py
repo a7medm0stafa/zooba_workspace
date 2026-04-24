@@ -224,7 +224,7 @@ def generate_launch_description():
         parameters=[{
             'speed_topic':   '/teleop/speed_cmd',
             'lateral_topic': '/teleop/lateral_cmd',
-            'output_topic':  '/teleop/raw_cmd',
+            'output_topic':  '/vehicle/cmd',
             'publish_rate':  20.0,
         }],
     )
