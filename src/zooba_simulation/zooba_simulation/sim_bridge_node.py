@@ -179,8 +179,19 @@ class SimBridgeNode(Node):
     def _tf_callback(self, msg: TFMessage):
         """Extract body_link pose from TF for ground-truth position."""
         for transform in msg.transforms:
+            # DEBUG: Log ALL frame IDs coming from Gazebo
+            self.get_logger().info(
+                f'[TF DEBUG] parent={transform.header.frame_id} '
+                f'child={transform.child_frame_id} '
+                f'pos=({transform.transform.translation.x:.3f}, '
+                f'{transform.transform.translation.y:.3f})',
+                throttle_duration_sec=5.0
+            )
+
             if transform.child_frame_id == 'body_link' or \
-               transform.child_frame_id == 'base_link':
+                transform.child_frame_id == 'base_link' or \
+                transform.child_frame_id == 'ackermann_steering_vehicle':
+
                 t = transform.transform.translation
                 q = transform.transform.rotation
 
@@ -192,6 +203,10 @@ class SimBridgeNode(Node):
                 cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
                 self.pose_yaw = math.atan2(siny_cosp, cosy_cosp)
 
+                if not self.tf_received:
+                    self.get_logger().info(
+                        f'[TF DEBUG] *** MATCHED frame: {transform.child_frame_id} ***'
+                    )
                 self.tf_received = True
                 break
 
@@ -226,6 +241,13 @@ class SimBridgeNode(Node):
             x = self.dr_x
             y = self.dr_y
             yaw = self.dr_yaw
+
+        # DEBUG: Show data source
+        source = "TF_GROUND_TRUTH" if self.tf_received else "DEAD_RECKONING"
+        self.get_logger().info(
+            f'[STATE DEBUG] source={source} x={x:.3f} y={y:.3f} yaw={math.degrees(yaw):.1f}°',
+            throttle_duration_sec=3.0
+        )
 
         # Publish VehicleState
         state = VehicleState()

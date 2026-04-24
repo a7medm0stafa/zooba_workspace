@@ -137,7 +137,7 @@ class LateralControlNode(Node):
         steering_rad = heading_error + cross_track_term
 
         # Convert to degrees and negate to match VehicleCmd convention (+right, -left)
-        steering_deg = math.degrees(steering_rad)
+        steering_deg = -math.degrees(steering_rad)
 
         # Saturate
         steering_deg = max(-self.max_steering_angle,
