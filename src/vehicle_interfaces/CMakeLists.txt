@@ -15,6 +15,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/VehicleCmd.msg"
   "msg/VehicleConstraints.msg"
   "msg/VehicleFeedback.msg"
+  "msg/VehicleState.msg"
+  "msg/ImuData.msg"
   DEPENDENCIES std_msgs
 )
 

@@ -1,6 +1,8 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 import cv2
 import numpy as np
 import time
@@ -81,6 +83,7 @@ class SignDetectionNode(Node):
         self.declare_parameter('vote_threshold', 11)
         self.declare_parameter('show_gui', True)
         self.declare_parameter('output_topic', '/sign/command')
+        self.declare_parameter('camera_topic', '/camera/image_raw')
         
         # Load parameters
         self.min_area = self.get_parameter('min_area').value
@@ -90,6 +93,7 @@ class SignDetectionNode(Node):
         self.vote_threshold = self.get_parameter('vote_threshold').value
         self.show_gui = self.get_parameter('show_gui').value
         output_topic = self.get_parameter('output_topic').value
+        camera_topic = self.get_parameter('camera_topic').value
 
         # Log active params
         self.get_logger().info(f"Loaded params - min_area: {self.min_area}, show_gui: {self.show_gui}")
@@ -105,13 +109,13 @@ class SignDetectionNode(Node):
         self.t_start_fps = time.time()
         self.prev_cmd = ''
 
-        # Initialize camera (0 for Pi Camera or USB Camera)
-        self.cap = cv2.VideoCapture(0)
-        if not self.cap.isOpened():
-            self.get_logger().error('Cannot open camera')
-        
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        # Subscribe to shared camera topic (instead of opening camera directly)
+        self.bridge = CvBridge()
+        self.latest_frame = None
+        self.image_sub = self.create_subscription(
+            Image, camera_topic, self._image_callback, 10
+        )
+        self.get_logger().info(f"Subscribing to camera on: {camera_topic}")
 
         self.test_images = [ "Turnn.png","SlowDown.png", "Stop.png"]
         self.img_idx = 0
@@ -361,22 +365,19 @@ class SignDetectionNode(Node):
             return winner, frac
         return 'NO_SIGN', 0.0
 
+    # ── camera subscription callback ──────────────────────
+    def _image_callback(self, msg: Image):
+        """Store the latest camera frame from the shared camera topic."""
+        try:
+            self.latest_frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        except Exception as e:
+            self.get_logger().error(f'CvBridge error: {e}')
+
     # ── ros timer callback ───────────────────────────────
     def timer_callback(self):
-        #package_share_directory = os.path.dirname(os.path.realpath(__file__))
-        #test_images = ["Turnn.png"]
-        #test_images = ["Stop.png"]
-        #test_images = ["SlowDown.png"]
-        #filename = test_images[self.img_idx]
-        #full_path = os.path.join(package_share_directory, filename)
-        #frame = cv2.imread(full_path)
-
-        ret, frame = self.cap.read()       
-        if not ret or frame is None:
-             self.get_logger().error("Failed to capture frame from camera")
-             return               
-        #frame = cv2.flip(frame, 1)
-        frame = cv2.flip(frame, -1)
+        frame = self.latest_frame
+        if frame is None:
+            return
 
         proc_start = time.time()
         detections, processed, hsv, debug_masks = self.detect(frame)
@@ -413,7 +414,6 @@ def main(args=None):
     except KeyboardInterrupt:
         node.get_logger().info('Shutting down sign detection node...')
     finally:
-        node.cap.release()
         cv2.destroyAllWindows()
         node.destroy_node()
         if rclpy.ok():

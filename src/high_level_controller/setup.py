@@ -33,6 +33,7 @@ setup(
     entry_points={
         'console_scripts': [
             'traffic_light_controller_node = high_level_controller.traffic_light_controller_node:main',
+            'command_arbiter_node = high_level_controller.command_arbiter_node:main',
         ],
     },
 )

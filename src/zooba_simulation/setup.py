@@ -15,6 +15,9 @@ setup(
         # Include launch files
         (os.path.join('share', package_name, 'launch'),
             glob(os.path.join('launch', '*launch.[pxy][yma]*'))),
+        # Include config files
+        (os.path.join('share', package_name, 'config'),
+            glob(os.path.join('config', '*.yaml')) + glob(os.path.join('config', '*.rviz'))),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -29,7 +32,11 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'sim_bridge_node = zooba_simulation.sim_bridge_node:main',
+            'sim_bridge_node         = zooba_simulation.sim_bridge_node:main',
+            'sim_speed_control_node  = zooba_simulation.sim_speed_control_node:main',
+            'sim_lateral_control_node = zooba_simulation.sim_lateral_control_node:main',
+            'sim_cmd_merger_node     = zooba_simulation.sim_cmd_merger_node:main',
+            'rviz_vehicle_node = zooba_simulation.rviz_vehicle_node:main',
         ],
     },
 )

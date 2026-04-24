@@ -46,9 +46,10 @@ def generate_launch_description():
         parameters=[{
             'output_topic': '/teleop/raw_cmd',
             'publish_rate': 10.0,
-            'velocity_step': 0.1,
+            'velocity_step': 0.05,
             'heading_step': 5.0,
-            'max_velocity': 4.0,
+            'max_velocity': 0.20,
+
             'max_heading': 45.0,
         }],
     )
@@ -74,8 +75,10 @@ def generate_launch_description():
         condition=IfCondition(PythonExpression(["'", LaunchConfiguration('teleop_type'), "' == 'joy'"])),
         parameters=[{
             'output_topic': '/teleop/raw_cmd',
-            'max_velocity': 4.0,
-            'max_heading': 45.0,
+
+            'max_velocity': 0.20,   # physical max
+	        'max_heading': 45.0,
+
             'axis_steering': 0,
             'axis_forward': 5, # R2/RT
             'axis_reverse': 2, # L2/LT

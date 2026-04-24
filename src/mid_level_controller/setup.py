@@ -36,6 +36,10 @@ setup(
             'teleop_joy_node = mid_level_controller.teleop_joy_node:main',
             'nonholonomic_constraints_node = mid_level_controller.nonholonomic_constraints_node:main',
             'open_loop_node = mid_level_controller.open_loop_node:main',
+            'speed_control_node = mid_level_controller.speed_control_node:main',
+            'lateral_control_node = mid_level_controller.lateral_control_node:main',
+            'control_merger_node = mid_level_controller.control_merger_node:main',
+            'odometry_node = mid_level_controller.odometry_node:main',
         ],
     },
 )

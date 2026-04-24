@@ -1,16 +1,21 @@
 """
-Low-Level Controller Node (Open-Loop + Encoder Feedback)
-========================================================
+Low-Level Controller Node (PI Speed Control + IMU Feedback)
+===========================================================
 Subscribes to /vehicle/cmd (VehicleCmd) with velocity (m/s) and heading (degrees).
-Maps velocity → PWM (0–255) and heading → servo angle (open-loop).
-Sends serial frames to Arduino: <direction>,<pwm>,<servo_angle>\n
-Reads encoder feedback from Arduino and publishes VehicleFeedback.
+Sends serial frames to Arduino in two modes:
+  - Mode 0 (open-loop):  0,<signed_pwm>,<servo_angle>\n
+  - Mode 1 (PI control): 1,<target_rpm_x10>,<servo_angle>\n
+
+Reads extended feedback from Arduino:
+  FB:<rpm>,<ticks>[,<ax>,<ay>,<az>,<gx>,<gy>,<gz>,<yaw>]
+Publishes VehicleFeedback and ImuData.
+
 Includes watchdog safety: stops vehicle if no command received within timeout.
 """
 
 import rclpy
 from rclpy.node import Node
-from vehicle_interfaces.msg import VehicleCmd, VehicleFeedback
+from vehicle_interfaces.msg import VehicleCmd, VehicleFeedback, ImuData
 import serial
 import serial.tools.list_ports
 import time
@@ -34,6 +39,9 @@ class LowLevelControllerNode(Node):
         self.declare_parameter('max_steering_angle', 30.0)  # degrees (+/- from center)
         self.declare_parameter('cmd_topic', '/vehicle/cmd')
         self.declare_parameter('feedback_topic', '/vehicle/feedback')
+        self.declare_parameter('imu_topic', '/vehicle/imu')
+        self.declare_parameter('use_pi_mode', True)         # Use Arduino PI mode
+        self.declare_parameter('gear_ratio', 134.181)       # Total gear ratio to wheel
 
         # --------------- Read Parameters ---------------
         self.serial_port_name = self.get_parameter('serial_port').value
@@ -46,6 +54,9 @@ class LowLevelControllerNode(Node):
         self.max_steering_angle = self.get_parameter('max_steering_angle').value
         cmd_topic = self.get_parameter('cmd_topic').value
         feedback_topic = self.get_parameter('feedback_topic').value
+        imu_topic = self.get_parameter('imu_topic').value
+        self.use_pi_mode = self.get_parameter('use_pi_mode').value
+        self.gear_ratio = self.get_parameter('gear_ratio').value
 
         # Precompute wheel circumference (for converting encoder RPM → m/s in feedback)
         self.wheel_circumference = 2.0 * math.pi * self.wheel_radius
@@ -62,10 +73,15 @@ class LowLevelControllerNode(Node):
             10
         )
 
-        # --------------- Publisher (encoder feedback) ---------------
+        # --------------- Publishers ---------------
         self.feedback_pub = self.create_publisher(
             VehicleFeedback,
             feedback_topic,
+            10
+        )
+        self.imu_pub = self.create_publisher(
+            ImuData,
+            imu_topic,
             10
         )
 
@@ -80,13 +96,16 @@ class LowLevelControllerNode(Node):
         self.last_direction = 1
 
         self.get_logger().info('=' * 55)
-        self.get_logger().info('Low-Level Controller Node Started (Open-Loop)')
+        self.get_logger().info('Low-Level Controller Node Started (PI + IMU)')
         self.get_logger().info(f'  Serial port   : {self.serial_port_name}')
         self.get_logger().info(f'  Baud rate     : {self.baud_rate}')
         self.get_logger().info(f'  Cmd topic     : {cmd_topic}')
         self.get_logger().info(f'  Feedback topic: {feedback_topic}')
-        self.get_logger().info(f'  Max velocity  : {self.max_velocity} m/s → PWM 255')
-        self.get_logger().info(f'  Wheel radius  : {self.wheel_radius} m (for feedback)')
+        self.get_logger().info(f'  IMU topic     : {imu_topic}')
+        self.get_logger().info(f'  Max velocity  : {self.max_velocity} m/s')
+        self.get_logger().info(f'  Wheel radius  : {self.wheel_radius} m')
+        self.get_logger().info(f'  Gear ratio    : 1:{self.gear_ratio}')
+        self.get_logger().info(f'  PI mode       : {"enabled" if self.use_pi_mode else "disabled (open-loop)"}')
         self.get_logger().info(f'  Servo range   : {self.servo_min}°–{self.servo_max}° (center: {self.servo_center}°)')
         self.get_logger().info(f'  Max steering  : ±{self.max_steering_angle}°')
         self.get_logger().info('=' * 55)
@@ -132,7 +151,7 @@ class LowLevelControllerNode(Node):
     # ==================== Serial Reader Thread ====================
 
     def _serial_reader(self):
-        """Background thread: reads feedback from Arduino and publishes VehicleFeedback."""
+        """Background thread: reads feedback from Arduino and publishes."""
         while self._serial_thread_running:
             if self.serial_conn is None or not self.serial_conn.is_open:
                 time.sleep(0.5)
@@ -151,8 +170,16 @@ class LowLevelControllerNode(Node):
                     self.get_logger().warn('Arduino watchdog triggered — motor stopped')
                 elif line.startswith('ERR_PARSE:'):
                     self.get_logger().error(f'Arduino parse error: {line}')
+                elif line.startswith('ERR_MODE:'):
+                    self.get_logger().error(f'Arduino mode error: {line}')
                 elif line == 'LOW_LEVEL_READY':
                     self.get_logger().info('Arduino ready')
+                elif line == 'IMU_OK':
+                    self.get_logger().info('Arduino IMU initialized successfully')
+                elif line.startswith('IMU_ERR:'):
+                    self.get_logger().warn(f'Arduino IMU error: {line}')
+                elif line.startswith('PWM:'):
+                    self.get_logger().info(f'Arduino -> Motor PWM: {line[4:]} / 255')
                 else:
                     self.get_logger().debug(f'Arduino: {line}')
 
@@ -164,11 +191,17 @@ class LowLevelControllerNode(Node):
                 time.sleep(0.1)
 
     def _parse_feedback(self, line):
-        """Parse 'FB:<rpm>,<ticks>' and publish VehicleFeedback."""
+        """
+        Parse feedback line and publish VehicleFeedback + ImuData.
+
+        Format (2 fields, no IMU):  FB:<rpm>,<ticks>
+        Format (9 fields, with IMU): FB:<rpm>,<ticks>,<ax>,<ay>,<az>,<gx>,<gy>,<gz>,<yaw>
+        """
         try:
             data = line[3:]  # Strip "FB:"
             parts = data.split(',')
-            if len(parts) != 2:
+
+            if len(parts) < 2:
                 return
 
             actual_rpm = float(parts[0])
@@ -182,6 +215,21 @@ class LowLevelControllerNode(Node):
             fb_msg.actual_rpm = actual_rpm
             fb_msg.encoder_ticks = encoder_ticks
             self.feedback_pub.publish(fb_msg)
+
+            # Parse IMU data if available (9 fields total)
+            if len(parts) >= 9:
+                imu_msg = ImuData()
+                imu_msg.header.stamp = self.get_clock().now().to_msg()
+                imu_msg.header.frame_id = 'imu_link'
+                # Values are ×100 integers from Arduino
+                imu_msg.accel_x = int(parts[2]) / 100.0
+                imu_msg.accel_y = int(parts[3]) / 100.0
+                imu_msg.accel_z = int(parts[4]) / 100.0
+                imu_msg.gyro_x = int(parts[5]) / 100.0
+                imu_msg.gyro_y = int(parts[6]) / 100.0
+                imu_msg.gyro_z = int(parts[7]) / 100.0
+                imu_msg.yaw = int(parts[8]) / 10.0  # ×10 integer → degrees
+                self.imu_pub.publish(imu_msg)
 
         except (ValueError, IndexError) as e:
             self.get_logger().warn(f'Failed to parse feedback: {line} ({e})')
@@ -200,14 +248,6 @@ class LowLevelControllerNode(Node):
         # Update watchdog
         self.last_cmd_time = time.time()
 
-        # --- Map velocity to direction + PWM (open-loop) ---
-        direction = 1 if velocity >= 0 else 0
-        abs_velocity = min(abs(velocity), self.max_velocity)
-
-        # Linear mapping: 0 m/s → PWM 0, max_velocity → PWM 255
-        pwm = int((abs_velocity / self.max_velocity) * 255.0)
-        pwm = max(0, min(255, pwm))
-
         # --- Map heading to servo angle ---
         heading = max(-self.max_steering_angle, min(self.max_steering_angle, heading))
 
@@ -219,33 +259,50 @@ class LowLevelControllerNode(Node):
         servo_angle = int(round(servo_angle))
         servo_angle = max(self.servo_min, min(self.servo_max, servo_angle))
 
-        # --- Send to Arduino ---
-        self._send_command(direction, pwm, servo_angle)
+        if self.use_pi_mode:
+            # --- PI mode: send target RPM ---
+            # Convert velocity (m/s) to output shaft RPM
+            # v = (RPM * wheel_circumference) / 60
+            # RPM = v * 60 / wheel_circumference
+            if abs(velocity) < 0.001:
+                target_rpm = 0.0
+            else:
+                target_rpm = velocity * 60.0 / self.wheel_circumference
 
-        # --- Log ---
-        dir_str = 'FWD' if direction == 1 else 'REV'
-        self.is_stopped = (pwm == 0)
+            # Encode as integer × 10 (preserves 1 decimal place)
+            rpm_x10 = int(round(target_rpm * 10.0))
+            self._send_command_raw(f'1,{rpm_x10},{servo_angle}')
 
-        self.get_logger().info(
-            f'CMD: vel={velocity:.2f}m/s heading={heading:.1f}° → '
-            f'{dir_str} PWM={pwm} Servo={servo_angle}°'
-        )
+            dir_str = 'FWD' if velocity >= 0 else 'REV'
+            self.get_logger().info(
+                f'CMD [PI]: vel={velocity:.2f}m/s → RPM={target_rpm:.1f} '
+                f'heading={heading:.1f}° → Servo={servo_angle}°',
+                throttle_duration_sec=1.0
+            )
+        else:
+            # --- Open-loop mode: send signed PWM ---
+            abs_velocity = min(abs(velocity), self.max_velocity)
+            pwm = int((abs_velocity / self.max_velocity) * 255.0)
+            pwm = max(0, min(255, pwm))
+            signed_pwm = pwm if velocity >= 0 else -pwm
+            self._send_command_raw(f'0,{signed_pwm},{servo_angle}')
+
+            dir_str = 'FWD' if velocity >= 0 else 'REV'
+            self.get_logger().info(
+                f'CMD [OL]: vel={velocity:.2f}m/s → {dir_str} PWM={pwm} '
+                f'heading={heading:.1f}° → Servo={servo_angle}°',
+                throttle_duration_sec=1.0
+            )
 
     # ==================== Send Serial Command ====================
 
-    def _send_command(self, direction: int, pwm: int, servo_angle: int):
-        """
-        Send frame to Arduino: <direction>,<pwm>,<servo_angle>\n
-        """
-        self.last_direction = direction
-        self.last_pwm = pwm
-        self.last_servo = servo_angle
-
+    def _send_command_raw(self, frame_str: str):
+        """Send a raw command string to Arduino (no newline added yet)."""
         if self.serial_conn is None or not self.serial_conn.is_open:
             if not self._reconnect_serial():
                 return
 
-        frame = f'{direction},{pwm},{servo_angle}\n'
+        frame = frame_str + '\n'
 
         try:
             self.serial_conn.write(frame.encode('ascii'))
@@ -260,7 +317,7 @@ class LowLevelControllerNode(Node):
         """Clean shutdown: stop vehicle and close serial."""
         self.get_logger().info('Shutting down — sending stop command...')
         self._serial_thread_running = False
-        self._send_command(1, 0, self.servo_center)
+        self._send_command_raw(f'0,0,{self.servo_center}')
 
         if self.serial_conn is not None and self.serial_conn.is_open:
             self.serial_conn.close()
