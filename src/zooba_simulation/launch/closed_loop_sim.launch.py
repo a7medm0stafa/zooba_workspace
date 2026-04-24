@@ -5,27 +5,12 @@ Full closed-loop simulation launch file.
 
 Launches:
     1. Gazebo (via gazebo_ackermann_steering_vehicle/launch/vehicle.launch.py)
-    2. sim_bridge_node        — bridges /vehicle/cmd ↔ Gazebo topics,
-                                publishes /vehicle/state ground-truth
-    3. speed_control_node     — PI controller → /teleop/speed_cmd  (Float64)
-    4. lateral_control_node   — Extended Stanley → /teleop/lateral_cmd (Float64)
-    5. control_merger_node    — merges both into /teleop/raw_cmd (VehicleCmd)
-    6. nonholonomic_constraints_node — applies kinematic limits → /vehicle/cmd
-
-All controller nodes come from the mid_level_controller package.
-
-Topic graph:
-    speed_control_node  ──► /teleop/speed_cmd   ──►┐
-                                                     control_merger_node ──► /teleop/raw_cmd
-    lateral_control_node ──► /teleop/lateral_cmd ──►┘         │
-                                                              ▼
-                                              nonholonomic_constraints_node
-                                                              │
-                                                              ▼
-                                                        /vehicle/cmd
-                                                              │
-                                                              ▼
-                                                      sim_bridge_node ──► Gazebo
+     2. sim_bridge_node        — bridges /vehicle/cmd ↔ Gazebo topics,
+                                 publishes /vehicle/feedback (sim encoder)
+     3. ground_truth_node (localization) — publishes /vehicle/state from Gazebo pose
+     4. speed_control_node     — PI controller → /teleop/speed_cmd  (Float64)
+     5. lateral_control_node   — Extended Stanley → /teleop/lateral_cmd (Float64)
+     6. control_merger_node    — merges both into /vehicle/cmd (VehicleCmd)
 
 Usage:
     # Defaults (0.5 m/s, straight lane y=0, spawn at origin):
@@ -159,9 +144,6 @@ def generate_launch_description():
     # ================================================================
     # ---- 2a. Gazebo model pose bridge (world-frame ground truth) ---
     # ================================================================
-    # The PosePublisher plugin in the vehicle xacro publishes the model's
-    # world-frame pose on /model/ackermann_steering_vehicle/pose (gz.msgs.Pose).
-    # Bridge it to ROS2 as geometry_msgs/PoseStamped.
     pose_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -173,7 +155,24 @@ def generate_launch_description():
     )
 
     # ================================================================
-    # ---- 2b. Simulation bridge node --------------------------------
+    # ---- 2b. Ground Truth Localization (from localization package) --
+    # ================================================================
+    ground_truth = Node(
+        package='localization',
+        executable='ground_truth_node',
+        name='ground_truth_node',
+        output='screen',
+        parameters=[{
+            'pose_topic':   '/model/ackermann_steering_vehicle/pose',
+            'state_topic':  '/vehicle/state',
+            'publish_rate': 20.0,
+            'wheel_radius': 0.04,
+            'wheelbase':    0.22,
+        }],
+    )
+
+    # ================================================================
+    # ---- 2c. Simulation bridge node (commands + encoder feedback) --
     # ================================================================
     sim_bridge = Node(
         package='zooba_simulation',
@@ -184,11 +183,8 @@ def generate_launch_description():
             'input_topic':    '/vehicle/cmd',
             'steering_topic': '/steering_angle',
             'velocity_topic': '/velocity',
-            'state_topic':    '/vehicle/state',
             'feedback_topic': '/vehicle/feedback',
-            'pose_topic':     '/model/ackermann_steering_vehicle/pose',
             'wheel_radius':   0.04,
-            'wheelbase':      0.22,
             'publish_rate':   20.0,
         }],
     )
@@ -276,6 +272,7 @@ def generate_launch_description():
         # --- then launch everything ---
         vehicle_launch,
         pose_bridge,
+        ground_truth,
         sim_bridge,
         speed_control,
         lateral_control,
