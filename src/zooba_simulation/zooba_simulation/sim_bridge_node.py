@@ -8,7 +8,7 @@ vehicle state from Gazebo to publish VehicleState.
 Subscribes to:
     /vehicle/cmd       (vehicle_interfaces/VehicleCmd)
     /joint_states      (sensor_msgs/JointState)       — wheel velocities + steering
-    /tf                (tf2_msgs/TFMessage)            — body_link pose
+    /model/pose        (geometry_msgs/PoseStamped)     — world-frame model pose from Gazebo
 
 Publishes:
     /steering_angle    (std_msgs/Float64)  — radians (+left, -right)
@@ -29,7 +29,7 @@ from rclpy.node import Node
 from vehicle_interfaces.msg import VehicleCmd, VehicleState, VehicleFeedback
 from std_msgs.msg import Float64
 from sensor_msgs.msg import JointState
-from tf2_msgs.msg import TFMessage
+from geometry_msgs.msg import PoseStamped
 
 
 class SimBridgeNode(Node):
@@ -43,6 +43,7 @@ class SimBridgeNode(Node):
         self.declare_parameter('velocity_topic', '/velocity')
         self.declare_parameter('state_topic', '/vehicle/state')
         self.declare_parameter('feedback_topic', '/vehicle/feedback')
+        self.declare_parameter('pose_topic', '/model/pose')
         self.declare_parameter('wheel_radius', 0.04)
         self.declare_parameter('wheelbase', 0.22)
         self.declare_parameter('publish_rate', 20.0)
@@ -52,6 +53,7 @@ class SimBridgeNode(Node):
         velocity_topic = self.get_parameter('velocity_topic').value
         state_topic = self.get_parameter('state_topic').value
         feedback_topic = self.get_parameter('feedback_topic').value
+        pose_topic = self.get_parameter('pose_topic').value
         self.wheel_radius = self.get_parameter('wheel_radius').value
         self.wheelbase = self.get_parameter('wheelbase').value
         publish_rate = self.get_parameter('publish_rate').value
@@ -61,13 +63,13 @@ class SimBridgeNode(Node):
         self.steering_angle = 0.0
         self.yaw_rate = 0.0
 
-        # Pose from TF (ground truth)
+        # Pose from Gazebo model pose (ground truth, world frame)
         self.pose_x = 0.0
         self.pose_y = 0.0
         self.pose_yaw = 0.0
-        self.tf_received = False
+        self.pose_received = False
 
-        # Dead-reckoning fallback (when no TF available)
+        # Dead-reckoning fallback (when no pose available)
         self.dr_x = 0.0
         self.dr_y = 0.0
         self.dr_yaw = 0.0
@@ -92,11 +94,11 @@ class SimBridgeNode(Node):
             10
         )
 
-        # ---- Subscriber: TF (ground truth pose) ----
-        self.tf_sub = self.create_subscription(
-            TFMessage,
-            '/tf',
-            self._tf_callback,
+        # ---- Subscriber: Model Pose (ground truth from Gazebo, world frame) ----
+        self.pose_sub = self.create_subscription(
+            PoseStamped,
+            pose_topic,
+            self._pose_callback,
             10
         )
 
@@ -117,6 +119,7 @@ class SimBridgeNode(Node):
         self.get_logger().info(f'  Input       : {input_topic} (VehicleCmd)')
         self.get_logger().info(f'  Steering    : {steering_topic} (Float64, rad)')
         self.get_logger().info(f'  Velocity    : {velocity_topic} (Float64, m/s)')
+        self.get_logger().info(f'  Pose input  : {pose_topic} (PoseStamped, world frame)')
         self.get_logger().info(f'  State out   : {state_topic} (VehicleState)')
         self.get_logger().info(f'  Feedback out: {feedback_topic} (VehicleFeedback)')
         self.get_logger().info(f'  Wheel radius: {self.wheel_radius:.4f} m')
@@ -176,24 +179,24 @@ class SimBridgeNode(Node):
         except (IndexError, AttributeError):
             pass
 
-    def _tf_callback(self, msg: TFMessage):
-        """Extract body_link pose from TF for ground-truth position."""
-        for transform in msg.transforms:
-            if transform.child_frame_id == 'body_link' or \
-               transform.child_frame_id == 'base_link':
-                t = transform.transform.translation
-                q = transform.transform.rotation
+    def _pose_callback(self, msg: PoseStamped):
+        """Receive model pose in world frame from Gazebo (via ros_gz_bridge)."""
+        t = msg.pose.position
+        q = msg.pose.orientation
 
-                self.pose_x = t.x
-                self.pose_y = t.y
+        self.pose_x = t.x
+        self.pose_y = t.y
 
-                # Quaternion to yaw
-                siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
-                cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
-                self.pose_yaw = math.atan2(siny_cosp, cosy_cosp)
+        # Quaternion to yaw
+        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        self.pose_yaw = math.atan2(siny_cosp, cosy_cosp)
 
-                self.tf_received = True
-                break
+        if not self.pose_received:
+            self.get_logger().info(
+                f'[SimBridge] First world-frame pose received: '
+                f'({self.pose_x:.2f}, {self.pose_y:.2f}) yaw={math.degrees(self.pose_yaw):.1f}°')
+        self.pose_received = True
 
     def _state_timer_callback(self):
         """Publish VehicleState and VehicleFeedback at fixed rate."""
@@ -213,8 +216,8 @@ class SimBridgeNode(Node):
         else:
             self.yaw_rate = 0.0
 
-        # Use TF ground truth if available, otherwise dead-reckoning
-        if self.tf_received:
+        # Use Gazebo ground truth if available, otherwise dead-reckoning
+        if self.pose_received:
             x = self.pose_x
             y = self.pose_y
             yaw = self.pose_yaw
@@ -230,7 +233,7 @@ class SimBridgeNode(Node):
         # Publish VehicleState
         state = VehicleState()
         state.header.stamp = now.to_msg()
-        state.header.frame_id = 'odom'
+        state.header.frame_id = 'world'
         state.x = x
         state.y = y
         state.yaw = yaw
@@ -245,6 +248,16 @@ class SimBridgeNode(Node):
         fb.actual_rpm = (self.velocity / self.wheel_circumference) * 60.0 if self.wheel_circumference > 0 else 0.0
         fb.encoder_ticks = self.sim_ticks
         self.feedback_pub.publish(fb)
+
+        # Log (throttled)
+        src = 'GZ' if self.pose_received else 'DR'
+        self.get_logger().info(
+            f'[SimBridge:{src}] pos=({x:.2f},{y:.2f}) '
+            f'yaw={math.degrees(yaw):.1f}° '
+            f'v={self.velocity:.3f} '
+            f'steer={math.degrees(self.steering_angle):.1f}°',
+            throttle_duration_sec=2.0
+        )
 
 
 def main(args=None):
