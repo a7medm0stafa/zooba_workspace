@@ -229,19 +229,19 @@ def generate_launch_description():
         }],
     )
 
-    # ================================================================
-    # ---- 6. Non-holonomic constraints node -------------------------
-    # ================================================================
-    mid_pkg = get_package_share_directory('mid_level_controller')
-    constraints_config = os.path.join(mid_pkg, 'config', 'vehicle_constraints.yaml')
+    # # ================================================================
+    # # ---- 6. Non-holonomic constraints node -------------------------
+    # # ================================================================
+    # mid_pkg = get_package_share_directory('mid_level_controller')
+    # constraints_config = os.path.join(mid_pkg, 'config', 'vehicle_constraints.yaml')
 
-    constraints_node = Node(
-        package='mid_level_controller',
-        executable='nonholonomic_constraints_node',
-        name='nonholonomic_constraints_node',
-        output='screen',
-        parameters=[constraints_config],
-    )
+    # constraints_node = Node(
+    #     package='mid_level_controller',
+    #     executable='nonholonomic_constraints_node',
+    #     name='nonholonomic_constraints_node',
+    #     output='screen',
+    #     parameters=[constraints_config],
+    # )
 
     # ================================================================
     return LaunchDescription([
@@ -257,5 +257,5 @@ def generate_launch_description():
         speed_control,
         lateral_control,
         cmd_merger,
-        constraints_node,
+        # constraints_node,
     ])
