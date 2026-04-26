@@ -4,23 +4,19 @@
 speed_control_node:
   ros__parameters:
     desired_speed: 0.5        # Goal speed [m/s]
-    kp: 1.0                   # Proportional gain
-    ki: 0.1                   # Integral gain
-    max_velocity: 2.0         # Output saturation [m/s]
-    control_rate: 20.0        # Control loop rate [Hz]
-    state_topic: /vehicle/state
-    output_topic: /teleop/speed_cmd
+    kp: 1.0                   # PI proportional gain
+    ki: 0.1                   # PI integral gain
+    max_velocity: 0.21        # Target speed saturation limit [m/s]
 
 lateral_control_node:
   ros__parameters:
     desired_y: 0.0            # Target lateral position (lane) [m]
-    desired_heading: 0.0      # Target heading [rad] (0 = along X-axis)
-    k_stanley: 4            # Cross-track gain
-    k_soft: 1.0               # Softening constant
-    max_steering_angle: 35.0  # Steering saturation [degrees]
-    control_rate: 20.0        # Control loop rate [Hz]
-    state_topic: /vehicle/state
-    output_topic: /teleop/lateral_cmd
+    desired_heading: 0.0      # Target heading [degrees] (0 = +X, 90 = +Y)
+    k_heading: 1.5            # Heading proportional gain
+    k_stanley: 2.5            # Cross-track gain
+    k_soft: 1.0               # Softening constant avoids div-by-zero
+    k_d_heading: 0.3          # Heading derivative damping gain
+    max_steering_angle: 45.0  # Steering output saturation [degrees]
 
 control_merger_node:
   ros__parameters:

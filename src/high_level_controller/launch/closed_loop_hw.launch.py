@@ -74,34 +74,6 @@ def generate_launch_description():
         'use_pi_mode', default_value='true',
         description='Use PI control mode on Arduino'
     )
-    desired_speed_arg = DeclareLaunchArgument(
-        'desired_speed', default_value='0.5',
-        description='Goal speed [m/s]'
-    )
-    desired_y_arg = DeclareLaunchArgument(
-        'desired_y', default_value='0.0',
-        description='Goal lateral position [m]'
-    )
-    desired_heading_arg = DeclareLaunchArgument(
-        'desired_heading', default_value='0.0',
-        description='Goal heading [degrees]'
-    )
-    k_heading_arg = DeclareLaunchArgument(
-        'k_heading', default_value='1.5',
-        description='Heading proportional gain'
-    )
-    kp_arg = DeclareLaunchArgument('kp', default_value='1.0',
-                                   description='PI proportional gain')
-    ki_arg = DeclareLaunchArgument('ki', default_value='0.1',
-                                   description='PI integral gain')
-    k_stanley_arg = DeclareLaunchArgument(
-        'k_stanley', default_value='2.5',
-        description='Stanley cross-track gain'
-    )
-    k_d_heading_arg = DeclareLaunchArgument(
-        'k_d_heading', default_value='0.3',
-        description='Heading derivative damping gain'
-    )
 
     # ---- Low-level controller node ----
     low_level_node = Node(
@@ -173,6 +145,11 @@ def generate_launch_description():
         }],
     )
 
+    control_config = os.path.join(
+        get_package_share_directory('mid_level_controller'),
+        'config', 'closed_loop_control.yaml'
+    )
+
     # ---- Speed control node (PI) ----
     speed_control_node = Node(
         package='mid_level_controller',
@@ -180,16 +157,15 @@ def generate_launch_description():
         name='speed_control_node',
         output='screen',
         condition=IfCondition(LaunchConfiguration('use_pi_mode')),
-        parameters=[{
-            'desired_speed': LaunchConfiguration('desired_speed'),
-            'kp': LaunchConfiguration('kp'),
-            'ki': LaunchConfiguration('ki'),
-            'max_velocity': 0.21,       # physical max ~0.249 m/s
-            'control_rate': 20.0,
-            'state_topic': '/vehicle/state',
-            'output_topic': '/teleop/speed_cmd',
-            'bypass_pi': True,           # Hardware uses Arduino PI, bypass ROS PI
-        }],
+        parameters=[
+            control_config,
+            {
+                'control_rate': 20.0,
+                'state_topic': '/vehicle/state',
+                'output_topic': '/teleop/speed_cmd',
+                'bypass_pi': True,           # Hardware uses Arduino PI, bypass ROS PI
+            }
+        ],
     )
 
     # ---- Lateral control node (Stanley) ----
@@ -199,19 +175,15 @@ def generate_launch_description():
         name='lateral_control_node',
         output='screen',
         condition=IfCondition(LaunchConfiguration('use_pi_mode')),
-        parameters=[{
-            'desired_y': LaunchConfiguration('desired_y'),
-            'desired_heading': LaunchConfiguration('desired_heading'),
-            'k_heading': LaunchConfiguration('k_heading'),
-            'k_stanley': LaunchConfiguration('k_stanley'),
-            'k_soft': 1.0,
-            'k_d_heading': LaunchConfiguration('k_d_heading'),
-            'max_steering_angle': 45.0,
-            'control_rate': 20.0,
-            'invert_steering_output': False,
-            'state_topic': '/vehicle/state',
-            'output_topic': '/teleop/lateral_cmd',
-        }],
+        parameters=[
+            control_config,
+            {
+                'control_rate': 20.0,
+                'invert_steering_output': False,
+                'state_topic': '/vehicle/state',
+                'output_topic': '/teleop/lateral_cmd',
+            }
+        ],
     )
 
     # ---- Control merger node ----
@@ -246,8 +218,6 @@ def generate_launch_description():
         use_ekf_arg,
         serial_port_arg,
         use_pi_mode_arg,
-        desired_speed_arg, desired_y_arg, desired_heading_arg,
-        k_heading_arg, kp_arg, ki_arg, k_stanley_arg, k_d_heading_arg,
         # Hardware
         low_level_node,
         ekf_node,
