@@ -18,9 +18,15 @@ CONFIGURATION:
     All speed + lateral control parameters are loaded from:
         mid_level_controller/config/closed_loop_control.yaml
 
+    You can override any control parameter from the command line:
+        ros2 launch high_level_controller closed_loop_hw.launch.py desired_speed:=0.15
+
 USAGE:
     # Default (EKF + Arduino PI):
     ros2 launch high_level_controller closed_loop_hw.launch.py
+
+    # Custom speed:
+    ros2 launch high_level_controller closed_loop_hw.launch.py desired_speed:=0.15
 
     # Use dead-reckoning instead of EKF:
     ros2 launch high_level_controller closed_loop_hw.launch.py use_ekf:=false
@@ -46,6 +52,18 @@ def generate_launch_description():
     serial_port_arg = DeclareLaunchArgument(
         'serial_port', default_value='/dev/ttyACM0',
         description='Arduino serial port'
+    )
+    desired_speed_arg = DeclareLaunchArgument(
+        'desired_speed', default_value='0.15',
+        description='Goal speed [m/s] — overrides YAML value'
+    )
+    desired_y_arg = DeclareLaunchArgument(
+        'desired_y', default_value='0.0',
+        description='Goal lateral position [m] — overrides YAML value'
+    )
+    desired_heading_arg = DeclareLaunchArgument(
+        'desired_heading', default_value='0.0',
+        description='Goal heading [degrees] — overrides YAML value'
     )
 
     # ---- Config file paths ----
@@ -134,6 +152,7 @@ def generate_launch_description():
         parameters=[
             control_config,
             {
+                'desired_speed': LaunchConfiguration('desired_speed'),
                 'control_rate': 20.0,
                 'state_topic': '/vehicle/state',
                 'output_topic': '/teleop/speed_cmd',
@@ -151,6 +170,8 @@ def generate_launch_description():
         parameters=[
             control_config,
             {
+                'desired_y': LaunchConfiguration('desired_y'),
+                'desired_heading': LaunchConfiguration('desired_heading'),
                 'control_rate': 20.0,
                 'invert_steering_output': False,
                 'state_topic': '/vehicle/state',
@@ -186,6 +207,9 @@ def generate_launch_description():
         # Arguments
         use_ekf_arg,
         serial_port_arg,
+        desired_speed_arg,
+        desired_y_arg,
+        desired_heading_arg,
         # Hardware
         low_level_node,
         ekf_node,
