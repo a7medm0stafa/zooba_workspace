@@ -166,8 +166,8 @@ class LateralControlNode(Node):
         heading_damp_term = self.k_d_heading * d_heading
         steering_rad = heading_term + heading_damp_term + cross_track_term
 
-        # Convert to degrees and negate (VehicleCmd: +right, Stanley: +left)
-        steering_deg = -math.degrees(steering_rad)
+        # Convert to degrees (Hardware requires positive output for Stanley, despite old comments)
+        steering_deg = math.degrees(steering_rad)
         steering_deg = max(-self.max_steering_angle,
                            min(self.max_steering_angle, steering_deg))
 
