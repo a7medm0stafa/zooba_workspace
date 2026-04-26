@@ -39,6 +39,7 @@ USAGE:
 
     # Open-loop mode (skip Arduino PI):
     ros2 launch high_level_controller closed_loop_hw.launch.py use_pi_mode:=false
+    
 
 ROLLBACK (revert to old dead-reckoning):
     Change the odometry_node definition below from:
@@ -126,34 +127,30 @@ def generate_launch_description():
     )
 
     # ---- EKF Localization node (replaces dead-reckoning odometry) ----
+    ekf_config = os.path.join(
+        get_package_share_directory('localization'),
+        'config', 'ekf_localization.yaml'
+    )
+
     ekf_node = Node(
         package='localization',
         executable='ekf_localization_node',
         name='ekf_localization_node',
         output='screen',
         condition=IfCondition(LaunchConfiguration('use_ekf')),
-        parameters=[{
-            'source': 'hardware',
-            'wheelbase': 0.22,
-            'wheel_radius': 0.033,
-            'encoder_cpr': 5471,
-            'feedback_topic': '/vehicle/feedback',
-            'imu_topic': '/vehicle/imu',
-            'state_topic': '/vehicle/state',
-            'publish_rate': 50.0,
-            # EKF tuning (defaults are good starting points)
-            'process_noise_x': 0.01,
-            'process_noise_y': 0.01,
-            'process_noise_yaw': 0.005,
-            'process_noise_vel': 0.1,
-            'process_noise_gyro_bias': 0.0001,
-            'encoder_velocity_noise': 0.05,
-            'gyro_rate_noise': 0.01,
-            'imu_yaw_noise': 0.15,
-            'zupt_velocity_threshold': 0.02,
-            'zupt_noise': 0.001,
-            'imu_settle_time': 2.5,
-        }],
+        parameters=[
+            ekf_config,
+            {
+                'source': 'hardware',
+                'wheelbase': 0.22,
+                'wheel_radius': 0.033,
+                'encoder_cpr': 5471,
+                'feedback_topic': '/vehicle/feedback',
+                'imu_topic': '/vehicle/imu',
+                'state_topic': '/vehicle/state',
+                'publish_rate': 50.0,
+            }
+        ],
     )
 
     # ---- Classic Odometry node (dead-reckoning fallback) ----
