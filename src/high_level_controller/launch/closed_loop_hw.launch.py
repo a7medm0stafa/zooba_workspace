@@ -93,7 +93,7 @@ def generate_launch_description():
             'cmd_topic': '/vehicle/cmd',
             'feedback_topic': '/vehicle/feedback',
             'imu_topic': '/vehicle/imu',
-            'use_pi_mode': LaunchConfiguration('use_pi_mode'),
+            'use_pi_mode': False,               # ROS PI is better than Arduino PI with EKF
             'gear_ratio': 124.333,       # 44.727 (internal) × 2.7798 (herringbone 45.45/16.35)
         }],
     )
@@ -163,7 +163,7 @@ def generate_launch_description():
                 'control_rate': 20.0,
                 'state_topic': '/vehicle/state',
                 'output_topic': '/teleop/speed_cmd',
-                'bypass_pi': True,           # Hardware uses Arduino PI, bypass ROS PI
+                'bypass_pi': False,           # Use ROS PI logic with filtered EKF velocity
             }
         ],
     )
