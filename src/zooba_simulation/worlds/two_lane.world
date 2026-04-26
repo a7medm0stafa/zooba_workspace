@@ -1,0 +1,234 @@
+<?xml version="1.0" ?>
+<!--
+  two_lane.world  —  Gazebo Harmonic (gz-sim 8) / SDF 1.6
+  =========================================================
+  A two-lane straight road for closed-loop lane-keeping and
+  lane-change testing with the Zooba simulation stack.
+
+  Layout (top view, driving in +X direction):
+  ─────────────────────────────────────────────────────────
+    Y=+2.0  ══ white edge ════════════════════════════
+            │      LEFT LANE   centre Y = +1.0 m     │
+    Y= 0.0  ─ ─ ─  yellow dashed centre divider ─ ─ ─
+            │      RIGHT LANE  centre Y = −1.0 m     │
+    Y=−2.0  ══ white edge ════════════════════════════
+            X=0  (white start)             X=35 (red end)
+  ─────────────────────────────────────────────────────────
+  Road length : 40 m  (X = −2 … +38, slab centred at X=18)
+  Lane width  : 2 m each  (4 m total)
+
+  Use desired_y = −1.0 for right lane, +1.0 for left lane.
+-->
+<sdf version="1.6">
+  <world name="two_lane_world">
+
+    <!-- ══════════════ PHYSICS ══════════════════════════════════ -->
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- ══════════════ SYSTEM PLUGINS ═══════════════════════════ -->
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-contact-system"
+            name="gz::sim::systems::Contact"/>
+
+    <!-- ══════════════ LIGHTING ══════════════════════════════════ -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- ══════════════ GROUND PLANE (extends beyond road) ════════ -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>200 200</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>200 200</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.3 0.3 0.3 1</ambient>
+            <diffuse>0.3 0.3 0.3 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══════════════ ROAD SURFACE (dark asphalt, 40 m × 4 m) ══ -->
+    <model name="road_surface">
+      <static>true</static>
+      <pose>18 0 0.001 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry>
+            <box><size>40 4.0 0.002</size></box>
+          </geometry>
+          <material>
+            <ambient>0.08 0.08 0.08 1</ambient>
+            <diffuse>0.10 0.10 0.10 1</diffuse>
+            <specular>0.02 0.02 0.02 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══════════════ LEFT ROAD EDGE  Y = +2.0 ══════════════════ -->
+    <model name="edge_left">
+      <static>true</static>
+      <pose>18 2.0 0.003 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><box><size>40 0.12 0.004</size></box></geometry>
+          <material>
+            <ambient>0.95 0.95 0.95 1</ambient>
+            <diffuse>0.95 0.95 0.95 1</diffuse>
+            <specular>0.2 0.2 0.2 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══════════════ RIGHT ROAD EDGE  Y = −2.0 ═════════════════ -->
+    <model name="edge_right">
+      <static>true</static>
+      <pose>18 -2.0 0.003 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><box><size>40 0.12 0.004</size></box></geometry>
+          <material>
+            <ambient>0.95 0.95 0.95 1</ambient>
+            <diffuse>0.95 0.95 0.95 1</diffuse>
+            <specular>0.2 0.2 0.2 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══════════════ CENTRE DASHED DIVIDER  Y = 0  (yellow) ════ -->
+    <!-- 10 dashes, 3 m on / 1 m off, starting at X=1.5 -->
+    <model name="dash_c_0"><static>true</static><pose>1.5  0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.10 0.004</size></box></geometry><material><ambient>0.9 0.75 0.0 1</ambient><diffuse>0.9 0.75 0.0 1</diffuse></material></visual></link></model>
+    <model name="dash_c_1"><static>true</static><pose>5.5  0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.10 0.004</size></box></geometry><material><ambient>0.9 0.75 0.0 1</ambient><diffuse>0.9 0.75 0.0 1</diffuse></material></visual></link></model>
+    <model name="dash_c_2"><static>true</static><pose>9.5  0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.10 0.004</size></box></geometry><material><ambient>0.9 0.75 0.0 1</ambient><diffuse>0.9 0.75 0.0 1</diffuse></material></visual></link></model>
+    <model name="dash_c_3"><static>true</static><pose>13.5 0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.10 0.004</size></box></geometry><material><ambient>0.9 0.75 0.0 1</ambient><diffuse>0.9 0.75 0.0 1</diffuse></material></visual></link></model>
+    <model name="dash_c_4"><static>true</static><pose>17.5 0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.10 0.004</size></box></geometry><material><ambient>0.9 0.75 0.0 1</ambient><diffuse>0.9 0.75 0.0 1</diffuse></material></visual></link></model>
+    <model name="dash_c_5"><static>true</static><pose>21.5 0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.10 0.004</size></box></geometry><material><ambient>0.9 0.75 0.0 1</ambient><diffuse>0.9 0.75 0.0 1</diffuse></material></visual></link></model>
+    <model name="dash_c_6"><static>true</static><pose>25.5 0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.10 0.004</size></box></geometry><material><ambient>0.9 0.75 0.0 1</ambient><diffuse>0.9 0.75 0.0 1</diffuse></material></visual></link></model>
+    <model name="dash_c_7"><static>true</static><pose>29.5 0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.10 0.004</size></box></geometry><material><ambient>0.9 0.75 0.0 1</ambient><diffuse>0.9 0.75 0.0 1</diffuse></material></visual></link></model>
+    <model name="dash_c_8"><static>true</static><pose>33.5 0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.10 0.004</size></box></geometry><material><ambient>0.9 0.75 0.0 1</ambient><diffuse>0.9 0.75 0.0 1</diffuse></material></visual></link></model>
+
+    <!-- ══════════════ RIGHT LANE CENTRE LINE  Y = −1.0  (white) ═ -->
+    <model name="lc_r_0"><static>true</static><pose>1.5  -1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+    <model name="lc_r_1"><static>true</static><pose>5.5  -1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+    <model name="lc_r_2"><static>true</static><pose>9.5  -1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+    <model name="lc_r_3"><static>true</static><pose>13.5 -1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+    <model name="lc_r_4"><static>true</static><pose>17.5 -1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+    <model name="lc_r_5"><static>true</static><pose>21.5 -1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+    <model name="lc_r_6"><static>true</static><pose>25.5 -1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+    <model name="lc_r_7"><static>true</static><pose>29.5 -1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+    <model name="lc_r_8"><static>true</static><pose>33.5 -1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+
+    <!-- ══════════════ LEFT LANE CENTRE LINE  Y = +1.0  (white) ══ -->
+    <model name="lc_l_0"><static>true</static><pose>1.5   1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+    <model name="lc_l_1"><static>true</static><pose>5.5   1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+    <model name="lc_l_2"><static>true</static><pose>9.5   1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+    <model name="lc_l_3"><static>true</static><pose>13.5  1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+    <model name="lc_l_4"><static>true</static><pose>17.5  1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+    <model name="lc_l_5"><static>true</static><pose>21.5  1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+    <model name="lc_l_6"><static>true</static><pose>25.5  1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+    <model name="lc_l_7"><static>true</static><pose>29.5  1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+    <model name="lc_l_8"><static>true</static><pose>33.5  1.0 0.003 0 0 0</pose><link name="l"><visual name="v"><geometry><box><size>3.0 0.06 0.004</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual></link></model>
+
+    <!-- ══════════════ START LINE  (white, X=0) ═══════════════════ -->
+    <model name="start_line">
+      <static>true</static>
+      <pose>0 0 0.003 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><box><size>0.08 4.0 0.004</size></box></geometry>
+          <material>
+            <ambient>1.0 1.0 1.0 1</ambient>
+            <diffuse>1.0 1.0 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══════════════ END LINE  (red, X=35) ══════════════════════ -->
+    <model name="end_line">
+      <static>true</static>
+      <pose>35 0 0.003 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><box><size>0.08 4.0 0.004</size></box></geometry>
+          <material>
+            <ambient>0.9 0.15 0.15 1</ambient>
+            <diffuse>0.9 0.15 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══════════════ KERB WALLS (physical barriers) ══════════════ -->
+    <model name="kerb_left">
+      <static>true</static>
+      <pose>18 2.12 0.03 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>40 0.08 0.06</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>40 0.08 0.06</size></box></geometry>
+          <material>
+            <ambient>0.6 0.6 0.6 1</ambient>
+            <diffuse>0.6 0.6 0.6 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="kerb_right">
+      <static>true</static>
+      <pose>18 -2.12 0.03 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>40 0.08 0.06</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>40 0.08 0.06</size></box></geometry>
+          <material>
+            <ambient>0.6 0.6 0.6 1</ambient>
+            <diffuse>0.6 0.6 0.6 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

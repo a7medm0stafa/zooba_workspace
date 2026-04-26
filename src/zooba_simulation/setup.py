@@ -18,6 +18,10 @@ setup(
         # Include config files
         (os.path.join('share', package_name, 'config'),
             glob(os.path.join('config', '*.yaml'))),
+        # Include world files
+        (os.path.join('share', package_name, 'worlds'),
+            glob(os.path.join('worlds', '*.world')) +
+            glob(os.path.join('worlds', '*.sdf'))),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -32,10 +36,11 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'sim_bridge_node         = zooba_simulation.sim_bridge_node:main',
-            'sim_speed_control_node  = zooba_simulation.sim_speed_control_node:main',
-            'sim_lateral_control_node = zooba_simulation.sim_lateral_control_node:main',
-            'sim_cmd_merger_node     = zooba_simulation.sim_cmd_merger_node:main',
+            'sim_bridge_node              = zooba_simulation.sim_bridge_node:main',
+            'sim_speed_control_node       = zooba_simulation.sim_speed_control_node:main',
+            'sim_lateral_control_node     = zooba_simulation.sim_lateral_control_node:main',
+            'sim_smc_lateral_control_node = zooba_simulation.sim_smc_lateral_control_node:main',
+            'sim_cmd_merger_node          = zooba_simulation.sim_cmd_merger_node:main',
         ],
     },
 )
