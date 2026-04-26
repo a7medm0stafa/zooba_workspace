@@ -66,7 +66,7 @@ import math
 import numpy as np
 import rclpy
 from rclpy.node import Node
-from vehicle_interfaces.msg import VehicleFeedback, ImuData, VehicleState
+from vehicle_interfaces.msg import VehicleFeedback, ImuData, VehicleState, VehicleCmd
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import TransformStamped
 import tf2_ros
@@ -208,6 +208,10 @@ class EKFLocalizationNode(Node):
             self.imu_sub = self.create_subscription(
                 ImuData, imu_topic,
                 self._imu_callback, 10)
+            # Subscribe to commanded steering for Ackermann yaw rate
+            self.cmd_sub = self.create_subscription(
+                VehicleCmd, '/vehicle/cmd',
+                self._cmd_callback, 10)
         else:
             # SIMULATION MODE: subscribe to Gazebo /joint_states
             # Joint names from vehicle.xacro:
@@ -316,6 +320,16 @@ class EKFLocalizationNode(Node):
         # ---- Heading measurement update (low trust, soft anchor) ----
         self.ekf.update_heading(self.latest_imu_yaw_rad)
 
+    def _cmd_callback(self, msg: VehicleCmd):
+        """Capture the commanded steering angle from /vehicle/cmd.
+
+        Called in HARDWARE mode only.
+        msg.heading is the steering angle in degrees.
+        This populates VehicleState.steering_angle and enables
+        Ackermann-based yaw rate prediction.
+        """
+        self.current_steering_angle = math.radians(msg.heading)
+
     # ================================================================
     # Simulation Callback
     # ================================================================
@@ -391,6 +405,31 @@ class EKFLocalizationNode(Node):
         # Guard against pathological dt
         if dt <= 0.0 or dt > 1.0:
             dt = 0.02  # fallback to 50 Hz
+
+        # ---- Wait for IMU to settle before running EKF ----
+        # During settling, publish zero state so controllers don't drive
+        # the car before heading calibration is complete.
+        if not self.imu_initialized:
+            state = VehicleState()
+            state.header.stamp = now.to_msg()
+            state.header.frame_id = 'odom'
+            state.x = 0.0
+            state.y = 0.0
+            state.yaw = 0.0
+            state.velocity = 0.0
+            state.yaw_rate = 0.0
+            state.steering_angle = 0.0
+            self.state_pub.publish(state)
+            return
+
+        # ---- Compute Ackermann yaw rate from commanded steering ----
+        # ω_ackermann = v · tan(δ) / L  (bicycle model)
+        # This provides a feed-forward yaw rate estimate independent of the gyro.
+        if abs(self.current_steering_angle) > 1e-4 and abs(self.ekf.velocity) > 0.01:
+            ackermann_yaw_rate = self.ekf.velocity * math.tan(self.current_steering_angle) / self.wheelbase
+            self.current_yaw_rate = ackermann_yaw_rate
+        else:
+            self.current_yaw_rate = self.latest_gyro_z
 
         # ---- EKF Prediction step ----
         self.ekf.predict(self.latest_gyro_z, dt)
