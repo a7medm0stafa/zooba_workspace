@@ -182,6 +182,7 @@ def generate_launch_description():
         executable='speed_control_node',
         name='speed_control_node',
         output='screen',
+        condition=IfCondition(LaunchConfiguration('use_pi_mode')),
         parameters=[{
             'desired_speed': LaunchConfiguration('desired_speed'),
             'kp': LaunchConfiguration('kp'),
@@ -200,6 +201,7 @@ def generate_launch_description():
         executable='lateral_control_node',
         name='lateral_control_node',
         output='screen',
+        condition=IfCondition(LaunchConfiguration('use_pi_mode')),
         parameters=[{
             'desired_y': LaunchConfiguration('desired_y'),
             'desired_heading': LaunchConfiguration('desired_heading'),
@@ -221,6 +223,7 @@ def generate_launch_description():
         executable='control_merger_node',
         name='control_merger_node',
         output='screen',
+        condition=IfCondition(LaunchConfiguration('use_pi_mode')),
         parameters=[{
             'speed_topic': '/teleop/speed_cmd',
             'lateral_topic': '/teleop/lateral_cmd',
