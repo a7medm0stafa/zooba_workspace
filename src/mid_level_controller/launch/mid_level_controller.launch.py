@@ -48,7 +48,7 @@ def generate_launch_description():
             'publish_rate': 10.0,
             'velocity_step': 0.05,
             'heading_step': 5.0,
-            'max_velocity': 0.20,
+            'max_velocity': 0.25,
 
             'max_heading': 45.0,
         }],
