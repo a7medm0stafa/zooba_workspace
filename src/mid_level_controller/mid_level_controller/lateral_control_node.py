@@ -50,6 +50,7 @@ class LateralControlNode(Node):
         self.declare_parameter('k_d_heading', 0.3)             # heading derivative damping
         self.declare_parameter('max_steering_angle', 35.0)     # degrees
         self.declare_parameter('control_rate', 20.0)           # Hz
+        self.declare_parameter('invert_steering_output', False) # Flips sign of steering output
         self.declare_parameter('state_topic', '/vehicle/state')
         self.declare_parameter('output_topic', '/teleop/lateral_cmd')
 
@@ -61,6 +62,7 @@ class LateralControlNode(Node):
         self.k_soft = self.get_parameter('k_soft').value
         self.k_d_heading = self.get_parameter('k_d_heading').value
         self.max_steering_angle = self.get_parameter('max_steering_angle').value
+        self.invert_steering_output = self.get_parameter('invert_steering_output').value
         control_rate = self.get_parameter('control_rate').value
         state_topic = self.get_parameter('state_topic').value
         output_topic = self.get_parameter('output_topic').value
@@ -97,6 +99,7 @@ class LateralControlNode(Node):
         self.get_logger().info(f'  k_soft          : {self.k_soft}')
         self.get_logger().info(f'  k_d_heading     : {self.k_d_heading}')
         self.get_logger().info(f'  Max steering    : ±{self.max_steering_angle:.1f}°')
+        self.get_logger().info(f'  Invert output   : {self.invert_steering_output}')
         self.get_logger().info(f'  Control rate    : {control_rate:.0f} Hz')
         self.get_logger().info(f'  State topic     : {state_topic}')
         self.get_logger().info(f'  Output topic    : {output_topic}')
@@ -166,8 +169,12 @@ class LateralControlNode(Node):
         heading_damp_term = self.k_d_heading * d_heading
         steering_rad = heading_term + heading_damp_term + cross_track_term
 
-        # Convert to degrees (Hardware requires positive output for Stanley, despite old comments)
+        # Convert to degrees
         steering_deg = math.degrees(steering_rad)
+        
+        # Apply hardware/sim inversion 
+        if self.invert_steering_output:
+            steering_deg = -steering_deg
         steering_deg = max(-self.max_steering_angle,
                            min(self.max_steering_angle, steering_deg))
 
