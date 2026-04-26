@@ -242,10 +242,10 @@ class BicycleEKF:
         """
         H = np.zeros((2, self.N_STATES))
         H[0, self.IV] = 1.0      # velocity = 0
-        H[1, self.ITHETA] = 0.0  # (yaw is constrained indirectly)
+        H[1, self.ITHETA] = 1.0  # constrain yaw to prevent drift
 
-        z = np.zeros(2)
-        z_pred = np.array([self.x[self.IV], 0.0])
+        z = np.array([0.0, self.x[self.ITHETA]])
+        z_pred = np.array([self.x[self.IV], self.x[self.ITHETA]])
 
         self._ekf_update(z, z_pred, H, self.R_zupt)
 
