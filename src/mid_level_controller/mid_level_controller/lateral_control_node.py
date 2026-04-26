@@ -44,8 +44,8 @@ class LateralControlNode(Node):
         # ---- Parameters ----
         self.declare_parameter('desired_y', 0.0)               # target lateral position [m]
         self.declare_parameter('desired_heading', 0.0)         # target heading [degrees]
-        self.declare_parameter('k_heading', 3)               # heading proportional gain
-        self.declare_parameter('k_stanley', 5)               # cross-track gain
+        self.declare_parameter('k_heading', 3.0)               # heading proportional gain
+        self.declare_parameter('k_stanley', 5.0)               # cross-track gain
         self.declare_parameter('k_soft', 1.0)                  # softening constant
         self.declare_parameter('k_d_heading', 0.3)             # heading derivative damping
         self.declare_parameter('max_steering_angle', 35.0)     # degrees
