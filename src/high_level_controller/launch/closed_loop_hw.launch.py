@@ -54,12 +54,17 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
+from launch.conditions import IfCondition, UnlessCondition
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
 
     # ---- Launch arguments ----
+    use_ekf_arg = DeclareLaunchArgument(
+        'use_ekf', default_value='true',
+        description='Use EKF localization instead of dead-reckoning'
+    )
     serial_port_arg = DeclareLaunchArgument(
         'serial_port', default_value='/dev/ttyACM0',
         description='Arduino serial port'
@@ -121,11 +126,12 @@ def generate_launch_description():
     )
 
     # ---- EKF Localization node (replaces dead-reckoning odometry) ----
-    odometry_node = Node(
+    ekf_node = Node(
         package='localization',
         executable='ekf_localization_node',
         name='ekf_localization_node',
         output='screen',
+        condition=IfCondition(LaunchConfiguration('use_ekf')),
         parameters=[{
             'source': 'hardware',
             'wheelbase': 0.22,
@@ -147,6 +153,26 @@ def generate_launch_description():
             'zupt_velocity_threshold': 0.02,
             'zupt_noise': 0.001,
             'imu_settle_time': 2.5,
+        }],
+    )
+
+    # ---- Classic Odometry node (dead-reckoning fallback) ----
+    odometry_node = Node(
+        package='mid_level_controller',
+        executable='odometry_node',
+        name='odometry_node',
+        output='screen',
+        condition=UnlessCondition(LaunchConfiguration('use_ekf')),
+        parameters=[{
+            'source': 'hardware',
+            'wheelbase': 0.22,
+            'wheel_radius': 0.033,
+            'encoder_cpr': 5471,
+            'use_imu_heading': True,
+            'feedback_topic': '/vehicle/feedback',
+            'imu_topic': '/vehicle/imu',
+            'state_topic': '/vehicle/state',
+            'publish_rate': 20.0,
         }],
     )
 
@@ -183,6 +209,7 @@ def generate_launch_description():
             'k_d_heading': LaunchConfiguration('k_d_heading'),
             'max_steering_angle': 45.0,
             'control_rate': 20.0,
+            'invert_steering_output': False,
             'state_topic': '/vehicle/state',
             'output_topic': '/teleop/lateral_cmd',
         }],
@@ -216,12 +243,14 @@ def generate_launch_description():
 
     return LaunchDescription([
         # Arguments
+        use_ekf_arg,
         serial_port_arg,
         use_pi_mode_arg,
         desired_speed_arg, desired_y_arg, desired_heading_arg,
         k_heading_arg, kp_arg, ki_arg, k_stanley_arg, k_d_heading_arg,
         # Hardware
         low_level_node,
+        ekf_node,
         odometry_node,
         # Controllers
         speed_control_node,

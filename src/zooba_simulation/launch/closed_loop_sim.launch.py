@@ -280,6 +280,7 @@ def generate_launch_description():
             'k_d_heading':        LaunchConfiguration('k_d_heading'),
             'max_steering_angle': LaunchConfiguration('max_steering_angle'),
             'control_rate':       20.0,
+            'invert_steering_output': True,
             'state_topic':        '/vehicle/state',
             'output_topic':       '/teleop/lateral_cmd',
         }],
