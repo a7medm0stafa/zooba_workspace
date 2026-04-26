@@ -3,7 +3,7 @@
 
 speed_control_node:
   ros__parameters:
-    desired_speed: 0.5        # Goal speed [m/s]
+    desired_speed: 0.15       # Goal speed [m/s]
     kp: 1.2                   # PI proportional gain
     ki: 0.5                   # PI integral gain
     max_velocity: 0.25        # Target speed saturation limit [m/s]
