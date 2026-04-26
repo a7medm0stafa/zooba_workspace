@@ -47,14 +47,14 @@ ekf_localization_node:
     # Process noise (Q matrix diagonal — higher = less trust in prediction model)
     process_noise_x: 0.01        # Position X prediction noise
     process_noise_y: 0.01        # Position Y prediction noise
-    process_noise_yaw: 0.005     # Heading prediction noise
+    process_noise_yaw: 0.002     # Heading prediction noise
     process_noise_vel: 0.1       # Velocity prediction noise
-    process_noise_gyro_bias: 0.0001  # Gyro bias random walk (keep small!)
+    process_noise_gyro_bias: 0.00001  # Gyro bias random walk (keep small!)
 
     # Measurement noise (R — higher = less trust in this sensor)
-    encoder_velocity_noise: 0.05   # Encoder velocity σ [m/s]
-    gyro_rate_noise: 0.05          # Gyroscope angular rate σ [rad/s]
-    imu_yaw_noise: 0.02           # IMU comp.filter heading σ [rad] (Trust it more now)
+    encoder_velocity_noise: 0.03   # Encoder velocity σ [m/s]
+    gyro_rate_noise: 0.15          # Gyroscope angular rate σ [rad/s]
+    imu_yaw_noise: 0.2           # IMU comp.filter heading σ [rad] (Trust it more now)
 
     # Zero-Velocity Update (ZUPT) — prevents drift when stopped
     zupt_velocity_threshold: 0.02  # Speed below which ZUPT activates [m/s]
