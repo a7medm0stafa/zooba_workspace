@@ -76,7 +76,7 @@ def generate_launch_description():
         parameters=[{
             'output_topic': '/teleop/raw_cmd',
 
-            'max_velocity': 0.20,   # physical max
+            'max_velocity': 0.25,   # physical max
 	        'max_heading': 45.0,
 
             'axis_steering': 0,
