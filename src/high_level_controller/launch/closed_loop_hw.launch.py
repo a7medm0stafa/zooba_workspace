@@ -102,7 +102,7 @@ def generate_launch_description():
             'wheelbase': 0.22,
             'wheel_radius': 0.033,       # 33 mm wheel
             'encoder_cpr': 5471,         # 44 × 44.727 × (45.45/16.35) = 44 × 124.333
-            'use_imu_heading': False,
+            'use_imu_heading': True,
             'source': 'hardware',
             'feedback_topic': '/vehicle/feedback',
             'imu_topic': '/vehicle/imu',
