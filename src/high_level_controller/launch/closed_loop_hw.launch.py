@@ -64,6 +64,10 @@ def generate_launch_description():
         'k_stanley', default_value='2.5',
         description='Stanley cross-track gain'
     )
+    k_soft_arg = DeclareLaunchArgument(
+        'k_soft', default_value='1.0',
+        description='Stanley softening constant'
+    )
     k_d_heading_arg = DeclareLaunchArgument(
         'k_d_heading', default_value='0.3',
         description='Heading derivative damping gain'
@@ -140,7 +144,7 @@ def generate_launch_description():
             'desired_heading': LaunchConfiguration('desired_heading'),
             'k_heading': LaunchConfiguration('k_heading'),
             'k_stanley': LaunchConfiguration('k_stanley'),
-            'k_soft': 1.0,
+            'k_soft': LaunchConfiguration('k_soft'),
             'k_d_heading': LaunchConfiguration('k_d_heading'),
             'max_steering_angle': 45.0,
             'control_rate': 20.0,
@@ -180,7 +184,7 @@ def generate_launch_description():
         serial_port_arg,
         use_pi_mode_arg,
         desired_speed_arg, desired_y_arg, desired_heading_arg,
-        k_heading_arg, kp_arg, ki_arg, k_stanley_arg, k_d_heading_arg,
+        k_heading_arg, kp_arg, ki_arg, k_stanley_arg, k_soft_arg, k_d_heading_arg,
         # Hardware
         low_level_node,
         odometry_node,
