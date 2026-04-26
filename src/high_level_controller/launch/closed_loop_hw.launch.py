@@ -47,6 +47,14 @@ def generate_launch_description():
         'serial_port', default_value='/dev/ttyACM0',
         description='Arduino serial port'
     )
+    desired_speed_arg = DeclareLaunchArgument(
+        'desired_speed', default_value='0.15',
+        description='Goal speed [m/s]'
+    )
+    desired_y_arg = DeclareLaunchArgument(
+        'desired_y', default_value='0.0',
+        description='Goal lateral position [m]'
+    )
 
     # ---- Config file paths ----
     ekf_config = os.path.join(
@@ -134,6 +142,7 @@ def generate_launch_description():
         parameters=[
             control_config,
             {
+                'desired_speed': LaunchConfiguration('desired_speed'),
                 'control_rate': 20.0,
                 'state_topic': '/vehicle/state',
                 'output_topic': '/teleop/speed_cmd',
@@ -151,6 +160,7 @@ def generate_launch_description():
         parameters=[
             control_config,
             {
+                'desired_y': LaunchConfiguration('desired_y'),
                 'control_rate': 20.0,
                 'invert_steering_output': False,
                 'state_topic': '/vehicle/state',
@@ -186,6 +196,8 @@ def generate_launch_description():
         # Arguments
         use_ekf_arg,
         serial_port_arg,
+        desired_speed_arg,
+        desired_y_arg,
         # Hardware
         low_level_node,
         ekf_node,
