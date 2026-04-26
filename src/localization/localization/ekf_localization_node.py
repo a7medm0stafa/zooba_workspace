@@ -313,9 +313,6 @@ class EKFLocalizationNode(Node):
         corrected_yaw_rad = math.radians(corrected_yaw_deg)
         self.latest_imu_yaw_rad = self._normalize_angle(corrected_yaw_rad)
 
-        # ---- Gyro rate measurement update (helps estimate bias) ----
-        self.ekf.update_gyro(msg.gyro_z)
-
         # ---- Heading measurement update (low trust, soft anchor) ----
         self.ekf.update_heading(self.latest_imu_yaw_rad)
 
@@ -404,8 +401,10 @@ class EKFLocalizationNode(Node):
         if abs(self.last_encoder_velocity) < self.zupt_velocity_threshold:
             if self.source == 'hardware':
                 self.ekf.zupt()
+                self.ekf.update_gyro(self.latest_gyro_z)
             elif abs(self.sim_velocity) < self.zupt_velocity_threshold:
                 self.ekf.zupt()
+                self.ekf.update_gyro(self.latest_gyro_z)
 
         # ---- Publish VehicleState ----
         state = VehicleState()
