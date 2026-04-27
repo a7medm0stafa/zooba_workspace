@@ -80,84 +80,80 @@ The project is modular by design: each subsystem (perception, planning, control,
 
 The architecture follows a **four-tier layered design**: Perception → High-Level Control → Mid-Level Control → Low-Level Actuation, with a parallel Localization module providing state estimation to all control layers.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              ZOOBA ARCHITECTURE                                │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   ┌──────────────────────────────────────────────┐                              │
-│   │             🎥  PERCEPTION LAYER              │                              │
-│   │                                              │                              │
-│   │  camera_publisher_node                       │                              │
-│   │       │  /camera/image_raw                   │                              │
-│   │       ├──► traffic_light_detector_node        │                              │
-│   │       │        │  /traffic_light/state        │                              │
-│   │       ├──► sign_detection_node                │                              │
-│   │       │        │  /sign/command               │                              │
-│   │       └──► dashboard_node (HUD overlay)       │                              │
-│   │                                              │                              │
-│   │   [PLANNED] obstacle_detection_node           │                              │
-│   │                  │  /obstacle/state            │                              │
-│   └──────────┬───────┴───────────────────────────┘                              │
-│              │                                                                   │
-│              ▼                                                                   │
-│   ┌──────────────────────────────────────────────┐                              │
-│   │          🧠  HIGH-LEVEL CONTROL LAYER         │                              │
-│   │                                              │                              │
-│   │  traffic_light_controller_node               │                              │
-│   │       │  Perception → velocity/heading       │                              │
-│   │       │  /teleop/auto_cmd                    │                              │
-│   │       ▼                                      │                              │
-│   │  command_arbiter_node                        │                              │
-│   │       │  Merges JOY + AUTO + Safety          │                              │
-│   │       │  /teleop/raw_cmd                     │                              │
-│   │                                              │                              │
-│   │   [PLANNED] path_planner_node                │                              │
-│   │       │  Waypoint / A* / RRT* trajectories   │                              │
-│   │   [PLANNED] rl_agent_node                    │                              │
-│   │       │  Learned decision-making policy       │                              │
-│   │       │  (lane change, overtake, merge)       │                              │
-│   └──────────┬───────────────────────────────────┘                              │
-│              │                                                                   │
-│              ▼                                                                   │
-│   ┌──────────────────────────────────────────────┐    ┌────────────────────┐    │
-│   │        ⚙️  MID-LEVEL CONTROL LAYER            │    │  📍 LOCALIZATION   │    │
-│   │                                              │    │                    │    │
-│   │  speed_control_node  (PI controller)         │◄───│  ground_truth_node │    │
-│   │       │  /teleop/speed_cmd                   │    │    (simulation)    │    │
-│   │  lateral_control_node (Extended Stanley)     │    │                    │    │
-│   │       │  /teleop/lateral_cmd                 │    │  odometry_node     │    │
-│   │  control_merger_node                         │    │    (real hardware) │    │
-│   │       │  /vehicle/cmd                        │    │    IMU + encoder   │    │
-│   │  nonholonomic_constraints_node               │    │    dead-reckoning  │    │
-│   │       │  (rate-limiting, Ackermann geometry)  │    │                    │    │
-│   │                                              │    │  /vehicle/state    │    │
-│   │  teleop_keyboard_node / teleop_joy_node      │    └────────────────────┘    │
-│   │       │  /teleop/joy_cmd                     │                              │
-│   └──────────┬───────────────────────────────────┘                              │
-│              │                                                                   │
-│              ▼                                                                   │
-│   ┌──────────────────────────────────────────────┐                              │
-│   │        🔧  LOW-LEVEL ACTUATION LAYER          │                              │
-│   │                                              │                              │
-│   │  ┌──────────────────┐  ┌──────────────────┐  │                              │
-│   │  │  low_level_       │  │  sim_bridge_node │  │                              │
-│   │  │  controller_node  │  │  (simulation)    │  │                              │
-│   │  │  (serial → HW)   │  │                  │  │                              │
-│   │  │  ┌────────────┐  │  │  → /steering_    │  │                              │
-│   │  │  │  Arduino   │  │  │     angle        │  │                              │
-│   │  │  │  Firmware   │  │  │  → /velocity     │  │                              │
-│   │  │  │  ┌────────┐│  │  │  → Gazebo        │  │                              │
-│   │  │  │  │Motor   ││  │  │    Ackermann     │  │                              │
-│   │  │  │  │Servo   ││  │  │    Plugin        │  │                              │
-│   │  │  │  │Encoder ││  │  │                  │  │                              │
-│   │  │  │  │IMU     ││  │  │  /vehicle/       │  │                              │
-│   │  │  │  └────────┘│  │  │   feedback       │  │                              │
-│   │  │  └────────────┘  │  └──────────────────┘  │                              │
-│   │  └──────────────────┘                        │                              │
-│   └──────────────────────────────────────────────┘                              │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    %% Direction: Top to Bottom
+
+    subgraph PERCEPTION ["🎥 PERCEPTION LAYER"]
+        style PERCEPTION fill:#fdf,stroke:#333,stroke-width:2px
+        CPN[camera_publisher_node]
+        TLD[traffic_light_detector_node]
+        SDN[sign_detection_node]
+        DBN[dashboard_node]
+        ODN["[PLANNED] obstacle_detection_node"]
+        
+        CPN -- "/camera/image_raw" --> TLD
+        CPN -- "/camera/image_raw" --> SDN
+        CPN -- "/camera/image_raw" --> DBN
+        CPN -- "/camera/image_raw" --> ODN
+    end
+
+    subgraph HIGH_LEVEL ["🧠 HIGH-LEVEL CONTROL LAYER"]
+        style HIGH_LEVEL fill:#dfd,stroke:#333,stroke-width:2px
+        TLC[traffic_light_controller_node]
+        ARB[command_arbiter_node]
+        PPN["[PLANNED] path_planner_node"]
+        RLA["[PLANNED] rl_agent_node"]
+    end
+
+    subgraph MID_LEVEL ["⚙️ MID-LEVEL CONTROL LAYER"]
+        style MID_LEVEL fill:#ddf,stroke:#333,stroke-width:2px
+        SCN[speed_control_node]
+        LCN[lateral_control_node]
+        CMN[control_merger_node]
+        NHC[nonholonomic_constraints_node]
+        TELE[teleop_nodes]
+    end
+
+    subgraph LOCALIZATION ["📍 LOCALIZATION"]
+        style LOCALIZATION fill:#fff4dd,stroke:#333,stroke-width:2px
+        GTN[ground_truth_node]
+        ODOM[odometry_node]
+    end
+
+    subgraph ACTUATION ["🔧 LOW-LEVEL ACTUATION LAYER"]
+        style ACTUATION fill:#eee,stroke:#333,stroke-width:2px
+        LLC[low_level_controller_node]
+        SB[sim_bridge_node]
+    end
+
+    %% Connections
+    TLD -- "/traffic_light/state" --> TLC
+    SDN -- "/sign/command" --> TLC
+    
+    TLC -- "/teleop/auto_cmd" --> ARB
+    PPN --> ARB
+    RLA --> ARB
+    
+    ARB -- "/teleop/raw_cmd" --> MID_LEVEL
+    TELE -- "/teleop/joy_cmd" --> ARB
+
+    SCN -- "/teleop/speed_cmd" --> CMN
+    LCN -- "/teleop/lateral_cmd" --> CMN
+    CMN -- "/vehicle/cmd" --> NHC
+    NHC -- "/vehicle/cmd (final)" --> ACTUATION
+    
+    GTN -- "/vehicle/state" --> SCN
+    GTN -- "/vehicle/state" --> LCN
+    ODOM -- "/vehicle/state" --> SCN
+    ODOM -- "/vehicle/state" --> LCN
+    
+    ACTUATION -- "/vehicle/feedback" --> LOCALIZATION
+    LLC -- "/imu/data" --> ODOM
+
+    %% Styling specific nodes
+    classDef planned fill:#fff,stroke-dasharray: 5 5;
+    class ODN,PPN,RLA planned
 ```
 
 ---
@@ -311,67 +307,51 @@ Arduino Uno firmware handling:
 
 ## Topic & Data Flow
 
-```
-  /camera/image_raw
-        │
-        ├──► traffic_light_detector_node ──► /traffic_light/state ──┐
-        ├──► sign_detection_node ──────────► /sign/command ─────────┤
-        └──► dashboard_node (display only)                         │
-                                                                   │
-                ┌──────────────────────────────────────────────────┘
-                ▼
-    traffic_light_controller_node
-                │
-                ├──► /teleop/auto_cmd ─────────┐
-                                               │
-    teleop_keyboard / teleop_joy               │
-                │                              │
-                ├──► /teleop/joy_cmd ──────────┤
-                                               │
-                                   command_arbiter_node
-                                               │
-                                               ▼
-                                      /teleop/raw_cmd
-                                               │
-                               ┌───────────────┼──────────────────┐
-                               ▼               │                  ▼
-                   nonholonomic_            [Closed-Loop Path]   (Direct
-                   constraints_node                               Teleop)
-                               │
-                               ▼
-                         /vehicle/cmd
-                               │
-              ┌────────────────┴────────────────┐
-              ▼                                 ▼
-   low_level_controller_node          sim_bridge_node
-   (Serial → Arduino → HW)           (→ Gazebo)
-              │                                 │
-              ▼                                 ▼
-   /vehicle/feedback                  /vehicle/feedback
-   /imu/data                          (simulated)
-              │                                 │
-              ▼                                 ▼
-   odometry_node                      ground_truth_node
-   (IMU + Encoder)                    (Gazebo Pose)
-              │                                 │
-              └─────────────┬───────────────────┘
-                            ▼
-                     /vehicle/state
-                            │
-              ┌─────────────┴─────────────────┐
-              ▼                               ▼
-   speed_control_node             lateral_control_node
-   (PI controller)                (Extended Stanley)
-              │                               │
-              ▼                               ▼
-   /teleop/speed_cmd              /teleop/lateral_cmd
-              │                               │
-              └───────────┬───────────────────┘
-                          ▼
-               control_merger_node
-                          │
-                          ▼
-                    /vehicle/cmd  (closed loop)
+```mermaid
+flowchart TD
+    %% Perception to High-Level
+    CAM([/camera/image_raw]) --> TLD[traffic_light_detector_node]
+    CAM --> SDN[sign_detection_node]
+    CAM --> DBN[dashboard_node]
+
+    TLD -- "/traffic_light/state" --> TLC[traffic_light_controller_node]
+    SDN -- "/sign/command" --> TLC
+
+    %% High-Level to Arbiter
+    TLC -- "/teleop/auto_cmd" --> ARB[command_arbiter_node]
+    
+    KB[teleop_keyboard] -- "/teleop/joy_cmd" --> ARB
+    JOY[teleop_joy] -- "/teleop/joy_cmd" --> ARB
+
+    %% Arbiter to Mid-Level
+    ARB -- "/teleop/raw_cmd" --> NHC[nonholonomic_constraints_node]
+
+    %% Mid-Level Loop
+    NHC -- "/vehicle/cmd" --> LLC[low_level_controller_node]
+    NHC -- "/vehicle/cmd" --> SB[sim_bridge_node]
+
+    %% Feedback to Localization
+    LLC -- "/vehicle/feedback" --> ODOM[odometry_node]
+    LLC -- "/imu/data" --> ODOM
+    SB -- "/vehicle/feedback (sim)" --> GTN[ground_truth_node]
+
+    %% Localization to Controllers
+    ODOM -- "/vehicle/state" --> SCN[speed_control_node]
+    ODOM -- "/vehicle/state" --> LCN[lateral_control_node]
+    GTN -- "/vehicle/state" --> SCN
+    GTN -- "/vehicle/state" --> LCN
+
+    %% Controllers to Merger
+    SCN -- "/teleop/speed_cmd" --> CMN[control_merger_node]
+    LCN -- "/teleop/lateral_cmd" --> CMN
+
+    %% Merger back to Constraints
+    CMN -- "/vehicle/cmd (closed loop)" --> NHC
+
+    %% Styling
+    style CAM fill:#f9f,stroke:#333
+    style ARB fill:#dfd,stroke:#333
+    style NHC fill:#ddf,stroke:#333
 ```
 
 ---
@@ -603,24 +583,28 @@ The ultimate vision is to replace the rule-based high-level controller with a **
 - **Training environment** — the Gazebo digital twin serves as the RL training simulator
 - **Deployment** — the trained policy runs as a ROS 2 node (`rl_agent_node`) that publishes decisions to the command arbiter, seamlessly integrating with the existing control stack
 
-```
-                        ┌─────────────────────────┐
-                        │   🧠  RL Agent Node      │
-                        │                         │
-  Perception State ────►│  Observation → Policy   │
-  /traffic_light/state  │  → Action Decision      │
-  /sign/command         │                         │
-  /obstacle/state       │  Actions:               │
-  /vehicle/state        │   • KEEP_LANE           │
-                        │   • CHANGE_LANE_LEFT    │
-                        │   • CHANGE_LANE_RIGHT   │
-                        │   • ACCELERATE          │
-                        │   • DECELERATE          │
-                        │   • STOP                │
-                        │                         │
-                        │  /teleop/auto_cmd ──────┼──► command_arbiter_node
-                        │  (velocity + heading)   │
-                        └─────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph INPUTS [Perception & State]
+        TL[/traffic_light/state/]
+        SC[/sign/command/]
+        OS[/obstacle/state/]
+        VS[/vehicle/state/]
+    end
+
+    subgraph RL [🧠 RL Agent Node]
+        direction TB
+        OBS[Observation]
+        POL[Policy]
+        ACT[Action Decision]
+        
+        OBS --> POL --> ACT
+    end
+
+    INPUTS --> RL
+    RL -- "/teleop/auto_cmd" --> ARB[command_arbiter_node]
+
+    style RL fill:#dfd,stroke:#333
 ```
 
 The modular architecture ensures the RL agent slots in at the high-level layer without changes to mid-level controllers, localization, or hardware — it simply replaces the rule-based traffic controller as the source of `/teleop/auto_cmd`.
