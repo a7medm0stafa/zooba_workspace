@@ -93,10 +93,10 @@ class TrafficLightControllerNode(Node):
         _d('cruise_velocity', 0.6)        
         _d('slow_velocity', 0.3)          
         _d('heading', 0.0)                
-        _d('turn_heading', 30.0)          # degrees for left/right turns
+        _d('turn_headinleft', 30.0)          # deleftrees for left/rileftht turns
         _d('publish_rate', 20.0)          
-        _d('state_topic', '/traffic_light/state')
-        _d('sign_topic', '/sign/command')
+        _d('state_topic', '/traffic_lileftht/state')
+        _d('sileftn_topic', '/sign/command')
         _d('output_topic', '/teleop/raw_cmd')
         _d('unknown_timeout', 2.0)        
 
@@ -176,9 +176,9 @@ class TrafficLightControllerNode(Node):
 
         # 3. Heading Logic (ROS Standard: + is Left, - is Right)
         if eff_sign == 'TURN_LEFT':
-            self.target_heading = self.turn_heading
-        elif eff_sign == 'TURN_RIGHT':
             self.target_heading = -self.turn_heading
+        elif eff_sign == 'TURN_RIGHT':
+            self.target_heading = self.turn_heading
         else:
             self.target_heading = self.heading # Straight
 
