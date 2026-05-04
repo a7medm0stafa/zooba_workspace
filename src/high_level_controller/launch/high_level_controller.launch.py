@@ -30,7 +30,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch.conditions import IfCondition
 from launch_ros.actions import Node
 
@@ -59,9 +59,24 @@ def generate_launch_description():
         description='Launch camera + perception nodes (set false for controller-only testing)'
     )
 
-    show_gui_arg = DeclareLaunchArgument(
-        'show_gui', default_value='false',
-        description='Enable debug GUI windows on both perception nodes'
+    show_dash_arg = DeclareLaunchArgument(
+        'show_dash', default_value='false',
+        description='Launch dashboard node'
+    )
+
+    show_traffic_arg = DeclareLaunchArgument(
+        'show_traffic', default_value='false',
+        description='Show traffic light debug display'
+    )
+
+    show_sign_arg = DeclareLaunchArgument(
+        'show_sign', default_value='false',
+        description='Show sign detection debug display'
+    )
+
+    show_both_arg = DeclareLaunchArgument(
+        'show_both', default_value='false',
+        description='Show both traffic light and sign detection debug displays'
     )
 
     # ---- 1. Camera Publisher (Perception) ----
@@ -91,7 +106,7 @@ def generate_launch_description():
         parameters=[{
             'camera_topic': '/camera/image_raw',
             'output_topic': '/sign/command',
-            'show_gui': False,
+            'show_gui': PythonExpression(["'true' if ('", LaunchConfiguration('show_sign'), "'.lower() == 'true' or '", LaunchConfiguration('show_both'), "'.lower() == 'true') else 'false'"]),
         }],
     )
 
@@ -104,7 +119,7 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('with_perception')),
         parameters=[{
             'camera_topic': '/camera/image_raw',
-            'show_debug_display': False,
+            'show_debug_display': PythonExpression(["'true' if ('", LaunchConfiguration('show_traffic'), "'.lower() == 'true' or '", LaunchConfiguration('show_both'), "'.lower() == 'true') else 'false'"]),
         }],
     )
 
@@ -156,7 +171,7 @@ def generate_launch_description():
         executable='dashboard_node',
         name='dashboard_node',
         output='screen',
-        condition=IfCondition(LaunchConfiguration('show_gui')),
+        condition=IfCondition(LaunchConfiguration('show_dash')),
         parameters=[{
             'camera_topic': '/camera/image_raw',
             'window_width': 800,
@@ -168,7 +183,10 @@ def generate_launch_description():
         hlc_config_arg,
         mlc_config_arg,
         with_perception_arg,
-        show_gui_arg,
+        show_dash_arg,
+        show_traffic_arg,
+        show_sign_arg,
+        show_both_arg,
         # Perception
         camera_publisher,
         sign_detection,
