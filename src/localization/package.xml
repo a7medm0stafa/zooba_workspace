@@ -1,24 +1,17 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>zooba_simulation</name>
+  <name>localization</name>
   <version>0.1.0</version>
-  <description>Simulation bridge: translates VehicleCmd to Gazebo Ackermann steering vehicle topics</description>
+  <description>Localization nodes for the Zooba autonomous vehicle: odometry (dead-reckoning from IMU + encoder) and ground-truth (Gazebo world-frame pose).</description>
   <maintainer email="ahm.mostafa03@gmail.com">ahmed</maintainer>
   <license>MIT</license>
 
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
-  <depend>sensor_msgs</depend>
-  <depend>tf2_msgs</depend>
-  <depend>vehicle_interfaces</depend>
-  <depend>visualization_msgs</depend>
-  <depend>nav_msgs</depend>
   <depend>geometry_msgs</depend>
-  <depend>tf2_ros</depend>
-
-  <exec_depend>gazebo_ackermann_steering_vehicle</exec_depend>
-  <exec_depend>localization</exec_depend>
+  <depend>sensor_msgs</depend>
+  <depend>vehicle_interfaces</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

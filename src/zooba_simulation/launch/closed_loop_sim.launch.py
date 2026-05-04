@@ -5,27 +5,12 @@ Full closed-loop simulation launch file.
 
 Launches:
     1. Gazebo (via gazebo_ackermann_steering_vehicle/launch/vehicle.launch.py)
-    2. sim_bridge_node        — bridges /vehicle/cmd ↔ Gazebo topics,
-                                publishes /vehicle/state ground-truth
-    3. speed_control_node     — PI controller → /teleop/speed_cmd  (Float64)
-    4. lateral_control_node   — Extended Stanley → /teleop/lateral_cmd (Float64)
-    5. control_merger_node    — merges both into /teleop/raw_cmd (VehicleCmd)
-    6. nonholonomic_constraints_node — applies kinematic limits → /vehicle/cmd
-
-All controller nodes come from the mid_level_controller package.
-
-Topic graph:
-    speed_control_node  ──► /teleop/speed_cmd   ──►┐
-                                                     control_merger_node ──► /teleop/raw_cmd
-    lateral_control_node ──► /teleop/lateral_cmd ──►┘         │
-                                                              ▼
-                                              nonholonomic_constraints_node
-                                                              │
-                                                              ▼
-                                                        /vehicle/cmd
-                                                              │
-                                                              ▼
-                                                      sim_bridge_node ──► Gazebo
+     2. sim_bridge_node        — bridges /vehicle/cmd ↔ Gazebo topics,
+                                 publishes /vehicle/feedback (sim encoder)
+     3. ground_truth_node (localization) — publishes /vehicle/state from Gazebo pose
+     4. speed_control_node     — PI controller → /teleop/speed_cmd  (Float64)
+     5. lateral_control_node   — Extended Stanley → /teleop/lateral_cmd (Float64)
+     6. control_merger_node    — merges both into /vehicle/cmd (VehicleCmd)
 
 Usage:
     # Defaults (0.5 m/s, straight lane y=0, spawn at origin):
@@ -114,7 +99,11 @@ def generate_launch_description():
     )
     desired_heading_arg = DeclareLaunchArgument(
         'desired_heading', default_value='0.0',
-        description='Target heading [rad] (0 = straight)'
+        description='Target heading [degrees] (0 = +X, 90 = +Y, 180 = -X)'
+    )
+    k_heading_arg = DeclareLaunchArgument(
+        'k_heading', default_value='1.0',
+        description='Heading proportional gain (> 1 for aggressive heading alignment)'
     )
     k_stanley_arg = DeclareLaunchArgument(
         'k_stanley', default_value='1.2',
@@ -125,11 +114,11 @@ def generate_launch_description():
         description='Stanley softening constant (avoids div-by-zero)'
     )
     k_d_heading_arg = DeclareLaunchArgument(
-        'k_d_heading', default_value='1.0',
+        'k_d_heading', default_value='0.2',
         description='Heading derivative damping gain (prevents heading overshoot)'
     )
     max_steering_arg = DeclareLaunchArgument(
-        'max_steering_angle', default_value='35.0',
+        'max_steering_angle', default_value='45.0',
         description='Steering output saturation [degrees]'
     )
 
@@ -153,7 +142,37 @@ def generate_launch_description():
     )
 
     # ================================================================
-    # ---- 2. Simulation bridge node ---------------------------------
+    # ---- 2a. Gazebo model pose bridge (world-frame ground truth) ---
+    # ================================================================
+    pose_bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        name='pose_bridge',
+        output='screen',
+        arguments=[
+            '/model/ackermann_steering_vehicle/pose@geometry_msgs/msg/PoseStamped[gz.msgs.Pose',
+        ],
+    )
+
+    # ================================================================
+    # ---- 2b. Ground Truth Localization (from localization package) --
+    # ================================================================
+    ground_truth = Node(
+        package='localization',
+        executable='ground_truth_node',
+        name='ground_truth_node',
+        output='screen',
+        parameters=[{
+            'pose_topic':   '/model/ackermann_steering_vehicle/pose',
+            'state_topic':  '/vehicle/state',
+            'publish_rate': 20.0,
+            'wheel_radius': 0.04,
+            'wheelbase':    0.22,
+        }],
+    )
+
+    # ================================================================
+    # ---- 2c. Simulation bridge node (commands + encoder feedback) --
     # ================================================================
     sim_bridge = Node(
         package='zooba_simulation',
@@ -164,10 +183,8 @@ def generate_launch_description():
             'input_topic':    '/vehicle/cmd',
             'steering_topic': '/steering_angle',
             'velocity_topic': '/velocity',
-            'state_topic':    '/vehicle/state',
             'feedback_topic': '/vehicle/feedback',
             'wheel_radius':   0.04,
-            'wheelbase':      0.22,
             'publish_rate':   20.0,
         }],
     )
@@ -203,11 +220,13 @@ def generate_launch_description():
         parameters=[{
             'desired_y':          LaunchConfiguration('desired_y'),
             'desired_heading':    LaunchConfiguration('desired_heading'),
+            'k_heading':          LaunchConfiguration('k_heading'),
             'k_stanley':          LaunchConfiguration('k_stanley'),
             'k_soft':             LaunchConfiguration('k_soft'),
             'k_d_heading':        LaunchConfiguration('k_d_heading'),
             'max_steering_angle': LaunchConfiguration('max_steering_angle'),
             'control_rate':       20.0,
+            'invert_steering_output': True,
             'state_topic':        '/vehicle/state',
             'output_topic':       '/teleop/lateral_cmd',
         }],
@@ -250,9 +269,11 @@ def generate_launch_description():
         x_arg, y_arg, z_arg, roll_arg, pitch_arg, yaw_arg,
         desired_speed_arg, kp_arg, ki_arg, max_velocity_arg,
         desired_y_arg, desired_heading_arg,
-        k_stanley_arg, k_soft_arg, k_d_heading_arg, max_steering_arg,
+        k_heading_arg, k_stanley_arg, k_soft_arg, k_d_heading_arg, max_steering_arg,
         # --- then launch everything ---
         vehicle_launch,
+        pose_bridge,
+        ground_truth,
         sim_bridge,
         speed_control,
         lateral_control,
