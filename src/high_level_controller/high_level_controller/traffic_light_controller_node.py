@@ -176,9 +176,9 @@ class TrafficLightControllerNode(Node):
 
         # 3. Heading Logic (ROS Standard: + is Left, - is Right)
         if eff_sign == 'TURN_LEFT':
-            self.target_heading = self.turn_heading
-        elif eff_sign == 'TURN_RIGHT':
             self.target_heading = -self.turn_heading
+        elif eff_sign == 'TURN_RIGHT':
+            self.target_heading = self.turn_heading
         else:
             self.target_heading = self.heading # Straight
 
