@@ -1,9 +1,26 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<!--
+  FILE: localization/package.xml
+  STATUS: MODIFIED — added tf2_ros dependency for EKF localization node
+  MODIFIED: 2026-04-24
+
+  CHANGES MADE:
+    1. Added <depend>tf2_ros</depend> — needed by ekf_localization_node.py
+       to broadcast the odom → base_link transform for RViz
+
+  DEPENDENCY LIST:
+    rclpy              — ROS2 Python client library
+    std_msgs           — standard message types
+    geometry_msgs      — PoseStamped (used by ground_truth_node)
+    sensor_msgs        — JointState (used by simulation mode)
+    vehicle_interfaces — VehicleState, VehicleFeedback, ImuData (custom msgs)
+    tf2_ros            — NEW: TF broadcaster for odom → base_link transform
+-->
 <package format="3">
   <name>localization</name>
-  <version>0.1.0</version>
-  <description>Localization nodes for the Zooba autonomous vehicle: odometry (dead-reckoning from IMU + encoder) and ground-truth (Gazebo world-frame pose).</description>
+  <version>0.2.0</version>
+  <description>Localization nodes for Zooba: EKF (fused encoder + IMU), odometry (dead-reckoning), and ground-truth (Gazebo).</description>
   <maintainer email="ahm.mostafa03@gmail.com">ahmed</maintainer>
   <license>MIT</license>
 
@@ -12,6 +29,7 @@
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>vehicle_interfaces</depend>
+  <depend>tf2_ros</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

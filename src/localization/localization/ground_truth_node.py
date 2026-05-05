@@ -12,7 +12,7 @@ Subscribes:
     /joint_states                            (sensor_msgs/JointState)   — wheel velocities
 
 Publishes:
-    /vehicle/state     (vehicle_interfaces/VehicleState) — ground truth state
+    /vehicle/state_gt     (vehicle_interfaces/VehicleState) — ground truth state
 """
 
 import math

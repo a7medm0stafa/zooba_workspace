@@ -44,8 +44,8 @@ class LateralControlNode(Node):
         # ---- Parameters ----
         self.declare_parameter('desired_y', 0.0)               # target lateral position [m]
         self.declare_parameter('desired_heading', 0.0)         # target heading [degrees]
-        self.declare_parameter('k_heading', 1.5)               # heading proportional gain
-        self.declare_parameter('k_stanley', 2.5)               # cross-track gain
+        self.declare_parameter('k_heading', 3.0)               # heading proportional gain
+        self.declare_parameter('k_stanley', 5.0)               # cross-track gain
         self.declare_parameter('k_soft', 1.0)                  # softening constant
         self.declare_parameter('k_d_heading', 0.3)             # heading derivative damping
         self.declare_parameter('max_steering_angle', 35.0)     # degrees
@@ -99,7 +99,7 @@ class LateralControlNode(Node):
         self.get_logger().info(f'  k_soft          : {self.k_soft}')
         self.get_logger().info(f'  k_d_heading     : {self.k_d_heading}')
         self.get_logger().info(f'  Max steering    : ±{self.max_steering_angle:.1f}°')
-        self.get_logger().info(f'  Invert output   : {self.invert_steering_output}')
+        self.get_logger().info(f'  Invert Output   : {self.invert_steering_output}')
         self.get_logger().info(f'  Control rate    : {control_rate:.0f} Hz')
         self.get_logger().info(f'  State topic     : {state_topic}')
         self.get_logger().info(f'  Output topic    : {output_topic}')
@@ -175,6 +175,7 @@ class LateralControlNode(Node):
         # Apply hardware/sim inversion 
         if self.invert_steering_output:
             steering_deg = -steering_deg
+            
         steering_deg = max(-self.max_steering_angle,
                            min(self.max_steering_angle, steering_deg))
 
