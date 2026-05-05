@@ -74,9 +74,9 @@ class LateralControlNode(Node):
         self.current_y = 0.0
         self.current_yaw = 0.0
         self.current_velocity = 0.0
+        self.current_yaw_rate = 0.0
 
-        # ---- Derivative state for heading damping ----
-        self.prev_heading_error = 0.0
+        # ---- Timer State ----
         self.last_time = self.get_clock().now()
 
         # ---- Subscriber ----
@@ -116,7 +116,6 @@ class LateralControlNode(Node):
                 self.desired_x = param.value
             elif param.name == 'desired_y':
                 self.desired_y = param.value
-                self.prev_heading_error = 0.0   # reset derivative on setpoint change
             elif param.name == 'desired_heading':
                 self.desired_heading = param.value
                 self.desired_heading_rad = math.radians(param.value)
@@ -137,6 +136,7 @@ class LateralControlNode(Node):
         self.current_y = msg.y
         self.current_yaw = msg.yaw
         self.current_velocity = msg.velocity
+        self.current_yaw_rate = msg.yaw_rate
 
     def _control_callback(self):
         """Extended Stanley control loop — compute and publish steering command."""
@@ -151,8 +151,9 @@ class LateralControlNode(Node):
         heading_error = self._normalize_angle(self.desired_heading_rad - self.current_yaw)
 
         # --- Derivative of heading error (damping) ---
-        d_heading = self._normalize_angle(heading_error - self.prev_heading_error) / dt
-        self.prev_heading_error = heading_error
+        # To avoid "derivative kick" when desired_heading changes, we damp the 
+        # process variable (yaw rate) directly instead of the error derivative.
+        d_heading = -self.current_yaw_rate
 
         # --- Cross-track error (perpendicular distance to desired path line) ---
         # Path: line through (desired_x, desired_y) in direction desired_heading_rad

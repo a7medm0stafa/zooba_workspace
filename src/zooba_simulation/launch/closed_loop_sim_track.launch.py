@@ -56,11 +56,11 @@ def generate_launch_description():
 
     # Path planner tuning
     cruise_speed_arg = DeclareLaunchArgument(
-        'cruise_speed', default_value='0.15',
+        'cruise_speed', default_value='1.5',
         description='Cruise speed on straights [m/s]'
     )
     curve_speed_arg = DeclareLaunchArgument(
-        'curve_speed', default_value='0.10',
+        'curve_speed', default_value='1.0',
         description='Speed in tight curves [m/s]'
     )
     lookahead_arg = DeclareLaunchArgument(
@@ -70,11 +70,11 @@ def generate_launch_description():
 
     # Stanley gains (simulation-tuned defaults)
     k_heading_arg = DeclareLaunchArgument(
-        'k_heading', default_value='1.0',
+        'k_heading', default_value='3.0',
         description='Heading proportional gain'
     )
     k_stanley_arg = DeclareLaunchArgument(
-        'k_stanley', default_value='1.2',
+        'k_stanley', default_value='5.0',
         description='Cross-track gain'
     )
     k_soft_arg = DeclareLaunchArgument(
@@ -82,7 +82,7 @@ def generate_launch_description():
         description='Softening constant'
     )
     k_d_heading_arg = DeclareLaunchArgument(
-        'k_d_heading', default_value='0.2',
+        'k_d_heading', default_value='0.3',
         description='Heading derivative damping'
     )
 

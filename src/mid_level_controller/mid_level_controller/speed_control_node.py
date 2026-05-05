@@ -32,7 +32,7 @@ class SpeedControlNode(Node):
         super().__init__('speed_control_node')
 
         # ---- Parameters ----
-        self.declare_parameter('desired_speed', 0.15)      # m/s (safe default)
+        self.declare_parameter('desired_speed', 0.20)      # m/s (safe default)
         self.declare_parameter('kp', 1.2)
         self.declare_parameter('ki', 0.1)
         self.declare_parameter('max_velocity', 0.21)       # m/s saturation (hardware limit)

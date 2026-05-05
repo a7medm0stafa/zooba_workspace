@@ -198,14 +198,27 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
         #           stay right, switch left before Obs2, finish
         return [
             (0.0,  0.1875),     # start in left lane
+            (0.5,  0.1875),     # anchor straight
+            (1.0,  0.1875),     # anchor straight
+            (1.5,  0.1875),     # anchor straight
+            (2.0,  0.1875),     # anchor straight
             (2.5,  0.1875),     # approach zone before obstacle 1
+            (2.8,  0.1875),     # hold lane until last moment
             (3.2,  0.0),        # begin lane change to right
-            (3.8, -0.1875),     # in right lane before obstacle 1
-            (5.0, -0.1875),     # past obstacle 1, cruising right lane
+            (3.6, -0.1875),     # in right lane before obstacle 1
+            (4.0, -0.1875),     # passing obstacle 1
+            (4.5, -0.1875),     # anchor right lane
+            (5.0, -0.1875),     # cruising right lane
+            (5.5, -0.1875),     # anchor right lane
+            (6.0, -0.1875),     # anchor right lane
             (6.5, -0.1875),     # approach zone before obstacle 2
+            (6.8, -0.1875),     # hold lane until last moment
             (7.2,  0.0),        # begin lane change to left
-            (7.8,  0.1875),     # in left lane before obstacle 2
+            (7.6,  0.1875),     # in left lane before obstacle 2
+            (8.0,  0.1875),     # passing obstacle 2
+            (8.5,  0.1875),     # anchor left lane
             (9.0,  0.1875),     # past obstacle 2
+            (9.5,  0.1875),     # anchor straight
             (10.0, 0.1875),     # finish
         ], False  # not closed
 
@@ -512,12 +525,27 @@ class PathPlannerNode(Node):
 
         self.current_target_idx = max(closest_idx, self.current_target_idx)
 
-        # --- Get target state ---
-        target_idx = min(lookahead_idx, self.n_traj_pts - 1)
-        target_x = self.traj_x[target_idx]
-        target_y = self.traj_y[target_idx]
-        target_heading = self.traj_heading[target_idx]
-        target_velocity = self.traj_velocity[target_idx]
+        # --- Compute lateral lookahead index (0.1m) ---
+        # This provides a "virtual front axle" to prevent late steering and overshoot
+        lateral_lookahead_idx = closest_idx
+        accum_dist = 0.0
+        for i in range(closest_idx, min(self.n_traj_pts - 1, closest_idx + 50)):
+            dx = self.traj_x[i+1] - self.traj_x[i]
+            dy = self.traj_y[i+1] - self.traj_y[i]
+            accum_dist += math.sqrt(dx*dx + dy*dy)
+            if accum_dist >= 0.10: # 10cm lateral lookahead
+                lateral_lookahead_idx = i + 1
+                break
+
+        # --- Get lateral target state (Stanley target) ---
+        lateral_idx = lateral_lookahead_idx
+        target_x = self.traj_x[lateral_idx]
+        target_y = self.traj_y[lateral_idx]
+        target_heading = self.traj_heading[lateral_idx]
+
+        # --- Get speed target state (use speed lookahead point) ---
+        speed_idx = min(lookahead_idx, self.n_traj_pts - 1)
+        target_velocity = self.traj_velocity[speed_idx]
 
         # --- Check goal reached ---
         if not self.is_closed:
@@ -563,7 +591,7 @@ class PathPlannerNode(Node):
 
         # --- Log (throttled) ---
         self.get_logger().info(
-            f'[Planner] idx={target_idx}/{self.n_traj_pts} '
+            f'[Planner] idx={lateral_idx}/{self.n_traj_pts} '
             f'tgt=({target_x:.2f},{target_y:.2f}) '
             f'h={target_heading_deg:.1f}° v={target_velocity:.2f} '
             f'pos=({self.current_x:.2f},{self.current_y:.2f}) '
