@@ -1,0 +1,147 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <world name="racing_track">
+    <!-- Required Physics and Render Plugins for Modern Gazebo -->
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics" />
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands" />
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster" />
+
+    <!-- Global Light Source -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Ground Plane -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>20 20</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>20 20</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Track 02: Racing Track with Obstacles -->
+    <model name="racing_track_map">
+      <static>true</static>
+      
+      <!-- Left Wall (Same as Track 01) -->
+      <link name="left_wall">
+        <pose>5 0.4 0.1 0 0 0</pose> 
+        <collision name="collision">
+          <geometry>
+            <box><size>10 0.05 0.2</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>10 0.05 0.2</size></box>
+          </geometry>
+          <material>
+            <ambient>1 0.5 0 1</ambient> 
+            <diffuse>1 0.5 0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Right Wall (Same as Track 01) -->
+      <link name="right_wall">
+        <pose>5 -0.4 0.1 0 0 0</pose> 
+        <collision name="collision">
+          <geometry>
+            <box><size>10 0.05 0.2</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>10 0.05 0.2</size></box>
+          </geometry>
+          <material>
+            <ambient>1 0.5 0 1</ambient>
+            <diffuse>1 0.5 0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Center Lane Divider (Visual Only) -->
+      <link name="center_line">
+        <pose>5 0 0.001 0 0 0</pose>
+        <visual name="visual">
+          <geometry>
+            <box><size>10 0.02 0.001</size></box>
+          </geometry>
+          <material>
+            <ambient>1 1 1 1</ambient> 
+            <diffuse>1 1 1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Obstacle 1: At 4m mark, blocking Lane 1 (Left lane, y > 0) -->
+      <link name="obstacle_1">
+        <!-- Placed at X=4, Y=0.1875 (center of the left lane). Width is 0.375m to block exactly one lane. -->
+        <pose>4 0.1875 0.1 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box><size>0.1 0.375 0.2</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.1 0.375 0.2</size></box>
+          </geometry>
+          <material>
+            <ambient>1 0 0 1</ambient> <!-- Red color for obstacles -->
+            <diffuse>1 0 0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Obstacle 2: At 8m mark, blocking Lane 2 (Right lane, y < 0) -->
+      <link name="obstacle_2">
+        <!-- Placed at X=8, Y=-0.1875 (center of the right lane). -->
+        <pose>8 -0.1875 0.1 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box><size>0.1 0.375 0.2</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.1 0.375 0.2</size></box>
+          </geometry>
+          <material>
+            <ambient>1 0 0 1</ambient> <!-- Red color -->
+            <diffuse>1 0 0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      
+    </model>
+  </world>
+</sdf>

@@ -1,0 +1,102 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <world name="city_track">
+    <!-- Required Physics and Render Plugins for Modern Gazebo -->
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics" />
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands" />
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster" />
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry>
+          <material>
+            <ambient>0.4 0.4 0.4 1</ambient>
+            <diffuse>0.4 0.4 0.4 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Track 03: City Track (5m x 4m Outer, 4m x 3m Inner) -->
+    <model name="city_track_map">
+      <static>true</static>
+
+      <!-- ================= STRAIGHT SECTIONS ================= -->
+      
+      <!-- Top and Bottom Straights (Length: 3m) -->
+      <link name="top_outer"><pose>0 2.0 0.1 0 0 0</pose><visual name="v"><geometry><box><size>3.0 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>3.0 0.05 0.2</size></box></geometry></collision></link>
+      <link name="top_inner"><pose>0 1.5 0.1 0 0 0</pose><visual name="v"><geometry><box><size>3.0 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>3.0 0.05 0.2</size></box></geometry></collision></link>
+      
+      <link name="bottom_outer"><pose>0 -2.0 0.1 0 0 0</pose><visual name="v"><geometry><box><size>3.0 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>3.0 0.05 0.2</size></box></geometry></collision></link>
+      <link name="bottom_inner"><pose>0 -1.5 0.1 0 0 0</pose><visual name="v"><geometry><box><size>3.0 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>3.0 0.05 0.2</size></box></geometry></collision></link>
+
+      <!-- Left and Right Straights (Length: 2m) -->
+      <link name="right_outer"><pose>2.5 0 0.1 0 0 1.5708</pose><visual name="v"><geometry><box><size>2.0 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>2.0 0.05 0.2</size></box></geometry></collision></link>
+      <link name="right_inner"><pose>2.0 0 0.1 0 0 1.5708</pose><visual name="v"><geometry><box><size>2.0 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>2.0 0.05 0.2</size></box></geometry></collision></link>
+      
+      <link name="left_outer"><pose>-2.5 0 0.1 0 0 1.5708</pose><visual name="v"><geometry><box><size>2.0 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>2.0 0.05 0.2</size></box></geometry></collision></link>
+      <link name="left_inner"><pose>-2.0 0 0.1 0 0 1.5708</pose><visual name="v"><geometry><box><size>2.0 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>2.0 0.05 0.2</size></box></geometry></collision></link>
+
+      <!-- ================= CORNER CURVATURES ================= -->
+      <!-- Approximated using 3 segments per 90-degree corner -->
+
+      <!-- Top-Right Corner -->
+      <!-- Outer Radius: 100cm -->
+      <link name="tr_o1"><pose>2.466 1.259 0.1 0 0 1.832</pose><visual name="v"><geometry><box><size>0.536 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.536 0.05 0.2</size></box></geometry></collision></link>
+      <link name="tr_o2"><pose>2.207 1.707 0.1 0 0 2.356</pose><visual name="v"><geometry><box><size>0.536 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.536 0.05 0.2</size></box></geometry></collision></link>
+      <link name="tr_o3"><pose>1.759 1.966 0.1 0 0 2.879</pose><visual name="v"><geometry><box><size>0.536 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.536 0.05 0.2</size></box></geometry></collision></link>
+      <!-- Inner Radius: 50cm -->
+      <link name="tr_i1"><pose>1.983 1.129 0.1 0 0 1.832</pose><visual name="v"><geometry><box><size>0.268 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.268 0.05 0.2</size></box></geometry></collision></link>
+      <link name="tr_i2"><pose>1.854 1.354 0.1 0 0 2.356</pose><visual name="v"><geometry><box><size>0.268 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.268 0.05 0.2</size></box></geometry></collision></link>
+      <link name="tr_i3"><pose>1.629 1.483 0.1 0 0 2.879</pose><visual name="v"><geometry><box><size>0.268 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.268 0.05 0.2</size></box></geometry></collision></link>
+
+      <!-- Top-Left Corner -->
+      <!-- Outer -->
+      <link name="tl_o1"><pose>-2.466 1.259 0.1 0 0 1.309</pose><visual name="v"><geometry><box><size>0.536 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.536 0.05 0.2</size></box></geometry></collision></link>
+      <link name="tl_o2"><pose>-2.207 1.707 0.1 0 0 0.785</pose><visual name="v"><geometry><box><size>0.536 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.536 0.05 0.2</size></box></geometry></collision></link>
+      <link name="tl_o3"><pose>-1.759 1.966 0.1 0 0 0.262</pose><visual name="v"><geometry><box><size>0.536 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.536 0.05 0.2</size></box></geometry></collision></link>
+      <!-- Inner -->
+      <link name="tl_i1"><pose>-1.983 1.129 0.1 0 0 1.309</pose><visual name="v"><geometry><box><size>0.268 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.268 0.05 0.2</size></box></geometry></collision></link>
+      <link name="tl_i2"><pose>-1.854 1.354 0.1 0 0 0.785</pose><visual name="v"><geometry><box><size>0.268 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.268 0.05 0.2</size></box></geometry></collision></link>
+      <link name="tl_i3"><pose>-1.629 1.483 0.1 0 0 0.262</pose><visual name="v"><geometry><box><size>0.268 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.268 0.05 0.2</size></box></geometry></collision></link>
+
+      <!-- Bottom-Left Corner -->
+      <!-- Outer -->
+      <link name="bl_o1"><pose>-2.466 -1.259 0.1 0 0 -1.309</pose><visual name="v"><geometry><box><size>0.536 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.536 0.05 0.2</size></box></geometry></collision></link>
+      <link name="bl_o2"><pose>-2.207 -1.707 0.1 0 0 -0.785</pose><visual name="v"><geometry><box><size>0.536 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.536 0.05 0.2</size></box></geometry></collision></link>
+      <link name="bl_o3"><pose>-1.759 -1.966 0.1 0 0 -0.262</pose><visual name="v"><geometry><box><size>0.536 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.536 0.05 0.2</size></box></geometry></collision></link>
+      <!-- Inner -->
+      <link name="bl_i1"><pose>-1.983 -1.129 0.1 0 0 -1.309</pose><visual name="v"><geometry><box><size>0.268 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.268 0.05 0.2</size></box></geometry></collision></link>
+      <link name="bl_i2"><pose>-1.854 -1.354 0.1 0 0 -0.785</pose><visual name="v"><geometry><box><size>0.268 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.268 0.05 0.2</size></box></geometry></collision></link>
+      <link name="bl_i3"><pose>-1.629 -1.483 0.1 0 0 -0.262</pose><visual name="v"><geometry><box><size>0.268 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.268 0.05 0.2</size></box></geometry></collision></link>
+
+      <!-- Bottom-Right Corner -->
+      <!-- Outer -->
+      <link name="br_o1"><pose>2.466 -1.259 0.1 0 0 -1.832</pose><visual name="v"><geometry><box><size>0.536 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.536 0.05 0.2</size></box></geometry></collision></link>
+      <link name="br_o2"><pose>2.207 -1.707 0.1 0 0 -2.356</pose><visual name="v"><geometry><box><size>0.536 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.536 0.05 0.2</size></box></geometry></collision></link>
+      <link name="br_o3"><pose>1.759 -1.966 0.1 0 0 -2.879</pose><visual name="v"><geometry><box><size>0.536 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.536 0.05 0.2</size></box></geometry></collision></link>
+      <!-- Inner -->
+      <link name="br_i1"><pose>1.983 -1.129 0.1 0 0 -1.832</pose><visual name="v"><geometry><box><size>0.268 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.268 0.05 0.2</size></box></geometry></collision></link>
+      <link name="br_i2"><pose>1.854 -1.354 0.1 0 0 -2.356</pose><visual name="v"><geometry><box><size>0.268 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.268 0.05 0.2</size></box></geometry></collision></link>
+      <link name="br_i3"><pose>1.629 -1.483 0.1 0 0 -2.879</pose><visual name="v"><geometry><box><size>0.268 0.05 0.2</size></box></geometry><material><ambient>1 0.5 0 1</ambient></material></visual><collision name="c"><geometry><box><size>0.268 0.05 0.2</size></box></geometry></collision></link>
+
+    </model>
+  </world>
+</sdf>
