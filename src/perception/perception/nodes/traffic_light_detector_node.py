@@ -185,7 +185,7 @@ class TrafficLightDetectorNode(Node):
 
         # KPI logging
         _d('enable_kpi_logging', True)
-        _d('kpi_csv_path', os.path.expanduser('~/zooba_kpi/traffic_light_kpi.csv'))
+        _d('kpi_csv_path', os.path.expanduser('~/zooba_workspace/zooba_kpi/traffic_light_kpi.csv'))
 
     def _load_yaml_params(self) -> dict:
         """Load parameter values from a YAML config file.

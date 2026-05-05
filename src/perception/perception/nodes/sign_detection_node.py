@@ -389,7 +389,7 @@ class SignDetectionNode(Node):
         self._kpi_file = None
         self._kpi_writer = None
 
-        csv_path = os.path.expanduser('~/zooba_kpi/sign_detection_kpi.csv')
+        csv_path = os.path.expanduser('~/zooba_workspace/zooba_kpi/sign_detection_kpi.csv')
         os.makedirs(os.path.dirname(csv_path), exist_ok=True)
 
         self._kpi_file = open(csv_path, 'w', newline='')
