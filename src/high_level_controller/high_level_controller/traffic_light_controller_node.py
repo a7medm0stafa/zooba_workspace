@@ -218,7 +218,7 @@ class TrafficLightControllerNode(Node):
             target_speed = self.cruise_velocity
 
         # Asynchronously update speed controller parameter
-        if self.speed_client.service_is_ready():
+        if self.speed_client.services_are_ready():
             self.speed_client.set_parameters_async([
                 Parameter('desired_speed', Parameter.Type.DOUBLE, float(target_speed))
             ])
@@ -248,7 +248,7 @@ class TrafficLightControllerNode(Node):
                 target_heading_deg = math.degrees(self.target_yaw)
 
         # Asynchronously update lateral controller parameter
-        if self.lat_client.service_is_ready():
+        if self.lat_client.services_are_ready():
             self.lat_client.set_parameters_async([
                 Parameter('desired_heading', Parameter.Type.DOUBLE, float(target_heading_deg))
             ])
@@ -291,7 +291,7 @@ class TrafficLightControllerNode(Node):
         self.get_logger().info('Shutting down — sending stop commands...')
         
         # Stop controllers
-        if self.speed_client.service_is_ready():
+        if self.speed_client.services_are_ready():
             self.speed_client.set_parameters_async([Parameter('desired_speed', Parameter.Type.DOUBLE, 0.0)])
         
         # Stop fallback arbiter
