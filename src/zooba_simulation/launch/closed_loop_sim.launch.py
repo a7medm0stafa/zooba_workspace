@@ -1,29 +1,38 @@
 """
 closed_loop_sim.launch.py
 ==========================
-Full closed-loop simulation launch file.
+Full closed-loop simulation with perception and high-level controller.
 
 Launches:
     1. Gazebo (via gazebo_ackermann_steering_vehicle/launch/vehicle.launch.py)
      2. sim_bridge_node        — bridges /vehicle/cmd ↔ Gazebo topics,
                                  publishes /vehicle/feedback (sim encoder)
-     3. ground_truth_node (localization) — publishes /vehicle/state from Gazebo pose
-     4. speed_control_node     — PI controller → /teleop/speed_cmd  (Float64)
-     5. lateral_control_node   — Extended Stanley → /teleop/lateral_cmd (Float64)
-     6. control_merger_node    — merges both into /vehicle/cmd (VehicleCmd)
+     3. pose_bridge            — bridges Gazebo model pose → ROS
+     4. ground_truth_node      — publishes /vehicle/state from Gazebo pose
+     5. sign_detection_node    — perceives turn/stop/slow signs from camera
+     6. traffic_light_detector — perceives traffic light state from camera
+     7. traffic_light_controller_node (HLC) — decides desired heading & speed,
+                                              sets params on Stanley + PI
+     8. speed_control_node     — PI controller → /teleop/speed_cmd  (Float64)
+     9. lateral_control_node   — Extended Stanley → /teleop/lateral_cmd (Float64)
+    10. control_merger_node    — merges both into /vehicle/cmd (VehicleCmd)
+
+Data Flow:
+    Perception → HLC (sets params) → MLC (Stanley + PI) → Merger → SimBridge → Gazebo
+    Gazebo → GroundTruth → /vehicle/state → MLC (closed-loop feedback)
+                                           → HLC (turn completion check)
 
 Usage:
-    # Defaults (0.5 m/s, straight lane y=0, spawn at origin):
+    # Defaults (0.25 m/s cruise, straight lane, spawn at origin):
     ros2 launch zooba_simulation closed_loop_sim.launch.py
 
     # Custom initial pose and goals:
     ros2 launch zooba_simulation closed_loop_sim.launch.py \\
         x:=1.0 y:=0.5 Y:=0.0 \\
-        desired_speed:=0.8 desired_y:=2.0
+        desired_speed:=0.3 desired_y:=2.0
 
-    # Tune PI and Stanley gains:
-    ros2 launch zooba_simulation closed_loop_sim.launch.py \\
-        kp:=2.0 ki:=0.3 k_stanley:=3.0 k_d_heading:=1.0
+    # Without perception (controller-only testing):
+    ros2 launch zooba_simulation closed_loop_sim.launch.py with_perception:=false
 """
 
 import os
@@ -32,6 +41,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.substitutions import LaunchConfiguration
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 
@@ -71,11 +81,19 @@ def generate_launch_description():
     )
 
     # ================================================================
+    # ---- Launch arguments: perception toggle -----------------------
+    # ================================================================
+    with_perception_arg = DeclareLaunchArgument(
+        'with_perception', default_value='true',
+        description='Launch perception + HLC nodes (false = controller-only)'
+    )
+
+    # ================================================================
     # ---- Launch arguments: speed controller (PI) -------------------
     # ================================================================
     desired_speed_arg = DeclareLaunchArgument(
-        'desired_speed', default_value='0.3',
-        description='Target speed [m/s]'
+        'desired_speed', default_value='0.25',
+        description='Target speed [m/s] (initial — HLC will override)'
     )
     kp_arg = DeclareLaunchArgument(
         'kp', default_value='0.5',
@@ -99,7 +117,7 @@ def generate_launch_description():
     )
     desired_heading_arg = DeclareLaunchArgument(
         'desired_heading', default_value='0.0',
-        description='Target heading [degrees] (0 = +X, 90 = +Y, 180 = -X)'
+        description='Target heading [degrees] (initial — HLC will override)'
     )
     k_heading_arg = DeclareLaunchArgument(
         'k_heading', default_value='1.0',
@@ -190,7 +208,53 @@ def generate_launch_description():
     )
 
     # ================================================================
-    # ---- 3. PI speed control node ----------------------------------
+    # ---- 3. Perception: Sign Detection ----------------------------
+    # ================================================================
+    sign_detection = Node(
+        package='perception',
+        executable='sign_detection_node',
+        name='sign_detection_node',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('with_perception')),
+        parameters=[{
+            'camera_topic': '/camera/image_raw',
+            'output_topic': '/sign/command',
+            'show_gui': True,
+        }],
+    )
+
+    # ================================================================
+    # ---- 4. Perception: Traffic Light Detection --------------------
+    # ================================================================
+    traffic_light_detector = Node(
+        package='perception',
+        executable='traffic_light_detector_node',
+        name='traffic_light_detector_node',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('with_perception')),
+        parameters=[{
+            'camera_topic': '/camera/image_raw',
+            'show_debug_display': True,
+        }],
+    )
+
+    # ================================================================
+    # ---- 5. High-Level Controller (HLC) ---------------------------
+    # ================================================================
+    hlc_share = get_package_share_directory('high_level_controller')
+    hlc_config = os.path.join(hlc_share, 'config', 'high_level_controller.yaml')
+
+    traffic_light_controller = Node(
+        package='high_level_controller',
+        executable='traffic_light_controller_node',
+        name='traffic_light_controller_node',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('with_perception')),
+        parameters=[hlc_config],
+    )
+
+    # ================================================================
+    # ---- 6. PI speed control node ----------------------------------
     # ================================================================
     speed_control = Node(
         package='mid_level_controller',
@@ -210,7 +274,7 @@ def generate_launch_description():
     )
 
     # ================================================================
-    # ---- 4. Extended Stanley lateral control node ------------------
+    # ---- 7. Extended Stanley lateral control node ------------------
     # ================================================================
     lateral_control = Node(
         package='mid_level_controller',
@@ -233,7 +297,7 @@ def generate_launch_description():
     )
 
     # ================================================================
-    # ---- 5. Command merger node ------------------------------------
+    # ---- 8. Command merger node ------------------------------------
     # ================================================================
     cmd_merger = Node(
         package='mid_level_controller',
@@ -248,25 +312,12 @@ def generate_launch_description():
         }],
     )
 
-    # # ================================================================
-    # # ---- 6. Non-holonomic constraints node -------------------------
-    # # ================================================================
-    # mid_pkg = get_package_share_directory('mid_level_controller')
-    # constraints_config = os.path.join(mid_pkg, 'config', 'vehicle_constraints.yaml')
-
-    # constraints_node = Node(
-    #     package='mid_level_controller',
-    #     executable='nonholonomic_constraints_node',
-    #     name='nonholonomic_constraints_node',
-    #     output='screen',
-    #     parameters=[constraints_config],
-    # )
-
     # ================================================================
     return LaunchDescription([
         # --- declare all args first ---
         world_arg,
         x_arg, y_arg, z_arg, roll_arg, pitch_arg, yaw_arg,
+        with_perception_arg,
         desired_speed_arg, kp_arg, ki_arg, max_velocity_arg,
         desired_y_arg, desired_heading_arg,
         k_heading_arg, k_stanley_arg, k_soft_arg, k_d_heading_arg, max_steering_arg,
@@ -275,8 +326,12 @@ def generate_launch_description():
         pose_bridge,
         ground_truth,
         sim_bridge,
+        # Perception + HLC (conditional)
+        sign_detection,
+        traffic_light_detector,
+        traffic_light_controller,
+        # MLC (always)
         speed_control,
         lateral_control,
         cmd_merger,
-        # constraints_node,
     ])

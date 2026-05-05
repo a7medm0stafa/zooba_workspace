@@ -1,19 +1,18 @@
 # Configuration for the High-Level Controller
 # =====================================================================
+# The HLC sets parameters on mid-level controllers (Stanley + PI)
+# via AsyncParameterClient.  It does NOT publish VehicleCmd directly.
 
 traffic_light_controller_node:
   ros__parameters:
-    # Speed on GREEN or UNKOWN light (m/s)
+    # Speed on GREEN or UNKNOWN light (m/s)
     cruise_velocity: 0.25
 
-    # Speed on YELLOW, SLOW_DOWN, or while turning (m/s)
+    # Speed on YELLOW, SLOW_DOWN (m/s)
     slow_velocity: 0.10
 
-    # Default steering angle (degrees) — straight ahead
+    # Default heading (degrees) — straight ahead in world frame
     heading: 0.0
-
-    # Steering angle when a TURN_LEFT or TURN_RIGHT sign is detected
-    turn_heading: 45.0
 
     # Command publish rate (Hz)
     publish_rate: 20.0
@@ -22,8 +21,14 @@ traffic_light_controller_node:
     state_topic: "/traffic_light/state"
     sign_topic: "/sign/command"
 
-    # Topic to publish VehicleCmd on (consumed by the command arbiter)
-    output_topic: "/teleop/auto_cmd"
+    # Vehicle state topic (for reading current yaw)
+    vehicle_state_topic: "/vehicle/state"
 
     # If no data is received for this long (seconds), treat as UNKNOWN/NO_SIGNAL
     unknown_timeout: 2.0
+
+    # Turn completion tolerance (degrees)
+    turn_tolerance_deg: 5.0
+
+    # Number of consecutive NO_SIGNAL frames before sign latch clears
+    sign_clear_frames: 10
