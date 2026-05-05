@@ -5,6 +5,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
+import csv
 import time
 from collections import deque
 import os
@@ -131,6 +132,9 @@ class SignDetectionNode(Node):
         # Timer running at ~20 FPS
         self.timer = self.create_timer(0.05, self.timer_callback)
         self.get_logger().info("Sign detection node started")
+
+        # -- KPI logging -----------------------------------------------
+        self._kpi_init()
 
     # ── preprocessing ────────────────────────────────────
     def preprocess(self, frame):
@@ -373,6 +377,72 @@ class SignDetectionNode(Node):
         except Exception as e:
             self.get_logger().error(f'CvBridge error: {e}')
 
+    # ── KPI logging infrastructure ────────────────────────
+    def _kpi_init(self):
+        """Initialise KPI CSV logging.
+
+        Opens the CSV in write mode so it clears on every launch.
+        """
+        self.kpi_total_frames = 0
+        self.kpi_candidate_frames = 0
+        self.kpi_confirmed_frames = 0
+        self._kpi_file = None
+        self._kpi_writer = None
+
+        csv_path = os.path.expanduser('~/zooba_workspace/zooba_kpi/sign_detection_kpi.csv')
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+
+        self._kpi_file = open(csv_path, 'w', newline='')
+        self._kpi_writer = csv.writer(self._kpi_file)
+        self._kpi_writer.writerow([
+            'timestamp', 'latency_ms',
+            'raw_detection', 'voted_command', 'vote_confidence',
+            'num_contours_found', 'candidates_found', 'detection_rate_pct',
+        ])
+        self._kpi_file.flush()
+        self.get_logger().info(f'KPI CSV logging to {csv_path}')
+
+    def _kpi_write_row(self, latency_ms, raw_detection, voted_command,
+                       vote_confidence, num_contours_found):
+        """Append one KPI row to the CSV."""
+        if self._kpi_writer is None:
+            return
+
+        self.kpi_total_frames += 1
+
+        # A "candidate frame" is one where contours passed geometric filters
+        candidates_found = 1 if num_contours_found > 0 else 0
+        if candidates_found:
+            self.kpi_candidate_frames += 1
+
+        # A "confirmed frame" is one where voting returned a real command
+        if voted_command != 'NO_SIGN' and voted_command != 'NO_SIGNAL':
+            self.kpi_confirmed_frames += 1
+
+        detection_rate_pct = (
+            (self.kpi_confirmed_frames / self.kpi_candidate_frames * 100.0)
+            if self.kpi_candidate_frames > 0 else 0.0
+        )
+
+        self._kpi_writer.writerow([
+            f'{time.time():.4f}',
+            f'{latency_ms:.2f}',
+            raw_detection,
+            voted_command,
+            f'{vote_confidence:.4f}',
+            num_contours_found,
+            candidates_found,
+            f'{detection_rate_pct:.2f}',
+        ])
+        self._kpi_file.flush()
+
+    def _kpi_close(self):
+        """Close the KPI CSV file handle."""
+        if self._kpi_file is not None:
+            self._kpi_file.close()
+            self._kpi_file = None
+            self._kpi_writer = None
+
     # ── ros timer callback ───────────────────────────────
     def timer_callback(self):
         frame = self.latest_frame
@@ -382,7 +452,11 @@ class SignDetectionNode(Node):
         proc_start = time.time()
         detections, processed, hsv, debug_masks = self.detect(frame)
         command, conf = self.vote(detections)
-        proc_ms = (time.time() - proc_start) * 1000 
+        proc_ms = (time.time() - proc_start) * 1000
+
+        # Determine raw detection label for KPI
+        raw_det = detections[0][0] if detections else 'NO_SIGN'
+
         msg = String()
         msg.data = "NO_SIGNAL" if command == 'NO_SIGN' else command
         self.command_publisher.publish(msg)
@@ -392,6 +466,16 @@ class SignDetectionNode(Node):
         if command != self.prev_cmd and command != 'NO_SIGN':
             self.get_logger().info(f'>>> {command:10} | Conf: {conf:.0%} | {proc_ms:>4.1f}ms | {self.fps:.0f} FPS')
         self.prev_cmd = command
+
+        # -- KPI CSV logging -------------------------------------------
+        self._kpi_write_row(
+            latency_ms=proc_ms,
+            raw_detection=raw_det,
+            voted_command=command,
+            vote_confidence=conf,
+            num_contours_found=len(detections),
+        )
+
         if self.show_gui:
             display = draw_gui(cv2.resize(frame, (640, 480)), detections, command, conf, self.fps)            
             mask_h, mask_w = 160, 640 // 3
@@ -414,6 +498,7 @@ def main(args=None):
     except KeyboardInterrupt:
         node.get_logger().info('Shutting down sign detection node...')
     finally:
+        node._kpi_close()
         cv2.destroyAllWindows()
         node.destroy_node()
         if rclpy.ok():

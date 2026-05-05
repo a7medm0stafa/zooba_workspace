@@ -32,7 +32,7 @@ traffic_light_detector_node:
     green_upper: [100, 255, 255]
 
     # ── Clustering ───────────────────────────────────────────────
-    max_circle_distance: 80.0 # Max center-to-center distance to cluster (px)
+    max_circle_distance: 120.0 # Max center-to-center distance to cluster (px)
     radius_tolerance: 0.75 # Max relative radius difference (ratio)
     alignment_tolerance: 1.0 # Max off-axis spread as multiple of avg radius
     min_cluster_size: 2 # Min circles needed in a cluster (rejects lone circles from sign text)

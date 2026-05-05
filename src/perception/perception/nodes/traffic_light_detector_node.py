@@ -36,6 +36,7 @@ Publishes:
     /traffic_light/debug_image  (sensor_msgs/Image)
 """
 
+import csv
 import os
 import time
 import yaml
@@ -102,6 +103,9 @@ class TrafficLightDetectorNode(Node):
         self.mode = MODE_DETECTION
         self.tracked_bbox = None          # (x1, y1, x2, y2) in ROI coords
         self.tracking_lost_count = 0      # Consecutive frames with no match
+
+        # -- KPI logging -----------------------------------------------
+        self._kpi_init()
 
         self.get_logger().info('Traffic light detector node started '
                                '(mode=DETECTION).')
@@ -178,6 +182,10 @@ class TrafficLightDetectorNode(Node):
         _d('processing_rate', 20.0)
         _d('show_debug_display', True)
         _d('camera_topic', '/camera/image_raw')
+
+        # KPI logging
+        _d('enable_kpi_logging', True)
+        _d('kpi_csv_path', os.path.expanduser('~/zooba_workspace/zooba_kpi/traffic_light_kpi.csv'))
 
     def _load_yaml_params(self) -> dict:
         """Load parameter values from a YAML config file.
@@ -265,6 +273,85 @@ class TrafficLightDetectorNode(Node):
             self.get_logger().error(f'CvBridge error: {e}')
 
     # ===================================================================
+    # KPI logging infrastructure
+    # ===================================================================
+
+    def _kpi_init(self):
+        """Initialise KPI CSV logging.
+
+        Opens the CSV in write mode so it clears on every launch.
+        """
+        self.kpi_total_frames = 0
+        self.kpi_candidate_frames = 0
+        self.kpi_confirmed_frames = 0
+        self._kpi_file = None
+        self._kpi_writer = None
+
+        if not self._p('enable_kpi_logging'):
+            return
+
+        csv_path = os.path.expanduser(self._p('kpi_csv_path'))
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+
+        self._kpi_file = open(csv_path, 'w', newline='')
+        self._kpi_writer = csv.writer(self._kpi_file)
+        self._kpi_writer.writerow([
+            'timestamp', 'latency_ms', 'mode',
+            'detection_latency_ms', 'tracking_latency_ms',
+            'detected_state', 'confirmed_state',
+            'num_circles', 'best_color_ratio',
+            'candidates_found', 'detection_rate_pct',
+        ])
+        self._kpi_file.flush()
+        self.get_logger().info(f'KPI CSV logging to {csv_path}')
+
+    def _kpi_write_row(self, latency_ms, mode,
+                       detection_latency_ms, tracking_latency_ms,
+                       detected_state, confirmed_state,
+                       num_circles, best_color_ratio):
+        """Append one KPI row to the CSV."""
+        if self._kpi_writer is None:
+            return
+
+        self.kpi_total_frames += 1
+
+        # A "candidate frame" is one where circles passed the filters
+        candidates_found = 1 if num_circles > 0 else 0
+        if candidates_found:
+            self.kpi_candidate_frames += 1
+
+        # A "confirmed frame" is one where temporal filtering gave a real state
+        if confirmed_state != 'UNKNOWN':
+            self.kpi_confirmed_frames += 1
+
+        detection_rate_pct = (
+            (self.kpi_confirmed_frames / self.kpi_candidate_frames * 100.0)
+            if self.kpi_candidate_frames > 0 else 0.0
+        )
+
+        self._kpi_writer.writerow([
+            f'{time.time():.4f}',
+            f'{latency_ms:.2f}',
+            mode,
+            f'{detection_latency_ms:.2f}',
+            f'{tracking_latency_ms:.2f}',
+            detected_state,
+            confirmed_state,
+            num_circles,
+            f'{best_color_ratio:.4f}',
+            candidates_found,
+            f'{detection_rate_pct:.2f}',
+        ])
+        self._kpi_file.flush()
+
+    def _kpi_close(self):
+        """Close the KPI CSV file handle."""
+        if self._kpi_file is not None:
+            self._kpi_file.close()
+            self._kpi_file = None
+            self._kpi_writer = None
+
+    # ===================================================================
     # Processing timer callback (runs the pipeline)
     # ===================================================================
 
@@ -285,13 +372,20 @@ class TrafficLightDetectorNode(Node):
         # -- 1. Preprocessing ------------------------------------------
         gray, hsv, roi_frame, roi_offset = self.preprocess_image(frame)
 
-        # -- Branch by mode --------------------------------------------
+        # -- Branch by mode (with per-mode latency) --------------------
+        detection_latency_ms = 0.0
+        tracking_latency_ms = 0.0
+
         if self.mode == MODE_TRACKING and self.tracked_bbox is not None:
+            t_mode = time.time()
             detected_state, cluster_info, circles = \
                 self._run_tracking_pipeline(gray, hsv)
+            tracking_latency_ms = (time.time() - t_mode) * 1000.0
         else:
+            t_mode = time.time()
             detected_state, cluster_info, circles = \
                 self._run_detection_pipeline(gray, hsv)
+            detection_latency_ms = (time.time() - t_mode) * 1000.0
 
         # -- 6. Temporal filtering -------------------------------------
         confirmed_state = self.select_state(detected_state)
@@ -314,6 +408,7 @@ class TrafficLightDetectorNode(Node):
         elapsed_ms = (time.time() - t_start) * 1000.0
         radii_str = ','.join(str(r) for _, _, r in circles) if circles else '-'
         n_clusters = sum(1 for ci in cluster_info if ci)
+        best_ratio = 0.0
         best_info = ''
         if cluster_info:
             top_score = 0
@@ -325,12 +420,25 @@ class TrafficLightDetectorNode(Node):
                         top_score = item['score']
                         top_ratio = item.get('ratio', 0)
                         top_intensity = item.get('intensity', 0)
+            best_ratio = top_ratio
             best_info = (f' | best: {detected_state} '
                          f'{top_ratio:.0%} i={top_intensity}')
         self.get_logger().info(
             f'[TLD] {self.mode} | {len(circles)} circles (r={radii_str}) | '
             f'{n_clusters} cluster(s){best_info} | '
             f'-> {confirmed_state} | {elapsed_ms:.1f}ms'
+        )
+
+        # -- KPI CSV logging -------------------------------------------
+        self._kpi_write_row(
+            latency_ms=elapsed_ms,
+            mode=self.mode,
+            detection_latency_ms=detection_latency_ms,
+            tracking_latency_ms=tracking_latency_ms,
+            detected_state=detected_state,
+            confirmed_state=confirmed_state,
+            num_circles=len(circles),
+            best_color_ratio=best_ratio,
         )
 
     # ===================================================================
@@ -1114,6 +1222,7 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        node._kpi_close()
         cv2.destroyAllWindows()
         node.destroy_node()
         if rclpy.ok():
