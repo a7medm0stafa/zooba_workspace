@@ -42,7 +42,8 @@ class LateralControlNode(Node):
         super().__init__('lateral_control_node')
 
         # ---- Parameters ----
-        self.declare_parameter('desired_y', 0.0)               # target lateral position [m]
+        self.declare_parameter('desired_x', 0.0)               # target X position [m]
+        self.declare_parameter('desired_y', 0.0)               # target Y position [m]
         self.declare_parameter('desired_heading', 0.0)         # target heading [degrees]
         self.declare_parameter('k_heading', 3.0)               # heading proportional gain
         self.declare_parameter('k_stanley', 5.0)               # cross-track gain
@@ -54,6 +55,7 @@ class LateralControlNode(Node):
         self.declare_parameter('state_topic', '/vehicle/state')
         self.declare_parameter('output_topic', '/teleop/lateral_cmd')
 
+        self.desired_x = self.get_parameter('desired_x').value
         self.desired_y = self.get_parameter('desired_y').value
         self.desired_heading = self.get_parameter('desired_heading').value          # degrees
         self.desired_heading_rad = math.radians(self.desired_heading)               # radians (internal)
@@ -92,6 +94,7 @@ class LateralControlNode(Node):
 
         self.get_logger().info('=' * 55)
         self.get_logger().info('Lateral Control Node Started (Extended Stanley)')
+        self.get_logger().info(f'  Desired X       : {self.desired_x:.2f} m')
         self.get_logger().info(f'  Desired Y       : {self.desired_y:.2f} m')
         self.get_logger().info(f'  Desired heading : {self.desired_heading:.1f}° ({self.desired_heading_rad:.4f} rad)')
         self.get_logger().info(f'  k_heading       : {self.k_heading}')
@@ -109,15 +112,15 @@ class LateralControlNode(Node):
         """Handle dynamic parameter updates."""
         from rcl_interfaces.msg import SetParametersResult
         for param in params:
-            if param.name == 'desired_y':
+            if param.name == 'desired_x':
+                self.desired_x = param.value
+            elif param.name == 'desired_y':
                 self.desired_y = param.value
                 self.prev_heading_error = 0.0   # reset derivative on setpoint change
-                self.get_logger().info(f'[Stanley] desired_y updated: {param.value:.2f} m')
             elif param.name == 'desired_heading':
                 self.desired_heading = param.value
                 self.desired_heading_rad = math.radians(param.value)
                 self.prev_heading_error = 0.0
-                self.get_logger().info(f'[Stanley] desired_heading updated: {param.value:.1f}° ({self.desired_heading_rad:.4f} rad)')
             elif param.name == 'k_heading':
                 self.k_heading = param.value
             elif param.name == 'k_stanley':
@@ -152,9 +155,9 @@ class LateralControlNode(Node):
         self.prev_heading_error = heading_error
 
         # --- Cross-track error (perpendicular distance to desired path line) ---
-        # Path: line through (0, desired_y) in direction desired_heading_rad
+        # Path: line through (desired_x, desired_y) in direction desired_heading_rad
         # Positive CTE = car needs to steer left to reach the path
-        dx = self.current_x
+        dx = self.current_x - self.desired_x
         dy = self.current_y - self.desired_y
         cross_track_error = dx * math.sin(self.desired_heading_rad) \
                           - dy * math.cos(self.desired_heading_rad)

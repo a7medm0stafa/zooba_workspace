@@ -34,6 +34,7 @@ setup(
         'console_scripts': [
             'traffic_light_controller_node = high_level_controller.traffic_light_controller_node:main',
             'command_arbiter_node = high_level_controller.command_arbiter_node:main',
+            'path_planner_node = high_level_controller.path_planner_node:main',
         ],
     },
 )

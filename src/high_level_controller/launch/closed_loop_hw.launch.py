@@ -55,6 +55,14 @@ def generate_launch_description():
         'desired_y', default_value='0.0',
         description='Goal lateral position [m]'
     )
+    track_arg = DeclareLaunchArgument(
+        'track', default_value='track_1',
+        description='Track for path planner (track_1, track_2, track_3)'
+    )
+    use_planner_arg = DeclareLaunchArgument(
+        'use_planner', default_value='false',
+        description='Enable path planner (overrides desired_speed/desired_y)'
+    )
 
     # ---- Config file paths ----
     ekf_config = os.path.join(
@@ -67,6 +75,8 @@ def generate_launch_description():
     )
     mid_pkg = get_package_share_directory('mid_level_controller')
     constraints_config = os.path.join(mid_pkg, 'config', 'vehicle_constraints.yaml')
+    hlc_pkg = get_package_share_directory('high_level_controller')
+    planner_config = os.path.join(hlc_pkg, 'config', 'path_planner_config.yaml')
 
     # ---- Low-level controller node (Arduino PI for speed) ----
     low_level_node = Node(
@@ -192,16 +202,37 @@ def generate_launch_description():
         parameters=[constraints_config],
     )
 
+    # ---- Path planner node (optional — enabled via use_planner:=true) ----
+    path_planner_node = Node(
+        package='high_level_controller',
+        executable='path_planner_node',
+        name='path_planner_node',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('use_planner')),
+        parameters=[
+            planner_config,
+            {
+                'track_name':    LaunchConfiguration('track'),
+                'state_topic':   '/vehicle/state',
+                'start_delay':   3.0,
+            }
+        ],
+    )
+
     return LaunchDescription([
         # Arguments
         use_ekf_arg,
         serial_port_arg,
         desired_speed_arg,
         desired_y_arg,
+        track_arg,
+        use_planner_arg,
         # Hardware
         low_level_node,
         ekf_node,
         odometry_node,
+        # Path planner (conditional)
+        path_planner_node,
         # Controllers
         speed_control_node,
         lateral_control_node,
