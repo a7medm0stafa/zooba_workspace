@@ -6,7 +6,7 @@ traffic_light_detector_node:
     param1: 150.0 # Canny threshold (Increased to ignore weak texture/noise)
     param2: 30.0 # Accumulator threshold (Increased to demand more perfect circles)
     min_radius: 5 # Min circle radius (px)
-    max_radius: 30 # Max circle radius (px)
+    max_radius: 20 # Max circle radius (px)
 
     # ── ROI ──────────────────────────────────────────────────────
     roi_height_ratio: 0.8 # Fraction of image height from top
