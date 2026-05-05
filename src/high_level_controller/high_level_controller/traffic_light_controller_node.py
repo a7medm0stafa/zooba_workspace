@@ -1,29 +1,35 @@
 """
 High-Level Controller Node
 =====================================================
-Subscribes to traffic light and traffic sign states from perception 
-and issues autonomous driving commands to the mid-level controller.
+Subscribes to traffic light and traffic sign states from perception,
+maintains stateful velocity and turning logic, and dynamically updates
+the mid-level controllers (Stanley lateral control and PI speed control)
+via ROS 2 Parameter Clients.
 
-Velocity Decision logic (Most Restrictive Wins):
-    RED or STOP                     → stop       (0.0 m/s)
-    YELLOW/UNKNOWN or SLOW/TURN     → slow down  (slow_velocity)
-    GREEN + NO_SIGNAL               → cruise     (cruise_velocity)
+Velocity State Logic:
+    RED or STOP                     → STOP state
+    YELLOW or SLOW_DOWN             → SLOW state
+    GREEN                           → FAST state
+    (Maintains current state if NO_SIGNAL or UNKNOWN)
 
-Heading Decision logic:
-    TURN_LEFT                       → steer left  (+turn_heading)
-    TURN_RIGHT                      → steer right (-turn_heading)
-    NO_SIGNAL / Other               → straight    (default heading)
+Turning State Logic:
+    TURN_LEFT                       → Computes target_yaw = current_yaw + 90
+    TURN_RIGHT                      → Computes target_yaw = current_yaw - 90
+    (Locks turning state until abs(current_yaw - target_yaw) < 2.0 degrees)
 """
 
 import os
 import yaml
 import time
+import math
 
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from vehicle_interfaces.msg import VehicleCmd
+from vehicle_interfaces.msg import VehicleCmd, VehicleState
 from ament_index_python.packages import get_package_share_directory
+from rclpy.parameter import Parameter
+from rclpy.parameter_client import AsyncParameterClient
 
 
 class TrafficLightControllerNode(Node):
@@ -39,13 +45,17 @@ class TrafficLightControllerNode(Node):
         self.cruise_velocity = self._p('cruise_velocity')
         self.slow_velocity = self._p('slow_velocity')
         self.heading = self._p('heading')
-        self.turn_heading = self._p('turn_heading')
         self.unknown_timeout = self._p('unknown_timeout')
         
         state_topic = self._p('state_topic')
         sign_topic = self._p('sign_topic')
+        vehicle_state_topic = self._p('vehicle_state_topic')
         output_topic = self._p('output_topic')
         publish_rate = self._p('publish_rate')
+
+        # -- Parameter Clients for Mid-Level Controllers ---------------
+        self.lat_client = AsyncParameterClient(self, 'lateral_control_node')
+        self.speed_client = AsyncParameterClient(self, 'speed_control_node')
 
         # -- State tracking --------------------------------------------
         self.current_light_state = 'UNKNOWN'
@@ -54,6 +64,14 @@ class TrafficLightControllerNode(Node):
         self.current_sign_state = 'NO_SIGNAL'
         self.last_sign_time = time.time()
         
+        self.current_yaw = 0.0
+
+        # State machine variables
+        self.velocity_state = 'FAST'     # 'FAST', 'SLOW', 'STOP'
+        self.turning_state = 'STRAIGHT'  # 'STRAIGHT', 'TURNING_LEFT', 'TURNING_RIGHT'
+        self.target_yaw = 0.0
+        
+        # Legacy tracking for auto_cmd topic
         self.target_velocity = 0.0       
         self.current_velocity = 0.0      
         self.target_heading = self.heading
@@ -65,8 +83,11 @@ class TrafficLightControllerNode(Node):
         self.sign_sub = self.create_subscription(
             String, sign_topic, self._sign_callback, 10
         )
+        self.vehicle_state_sub = self.create_subscription(
+            VehicleState, vehicle_state_topic, self._vehicle_state_callback, 10
+        )
 
-        # -- Publisher: vehicle command ---------------------------------
+        # -- Publisher: vehicle command (legacy/fallback) --------------
         self.cmd_pub = self.create_publisher(VehicleCmd, output_topic, 10)
 
         # -- Timer for periodic command publishing ----------------------
@@ -75,13 +96,13 @@ class TrafficLightControllerNode(Node):
 
         # -- Startup log -----------------------------------------------
         self.get_logger().info('=' * 58)
-        self.get_logger().info('High-Level Controller Node Started')
+        self.get_logger().info('High-Level Controller Node Started (Stateful)')
         self.get_logger().info(f'  Light topic     : {state_topic}')
         self.get_logger().info(f'  Sign topic      : {sign_topic}')
+        self.get_logger().info(f'  Vehicle state   : {vehicle_state_topic}')
         self.get_logger().info(f'  Output topic    : {output_topic}')
         self.get_logger().info(f'  Cruise velocity : {self.cruise_velocity:.2f} m/s')
         self.get_logger().info(f'  Slow velocity   : {self.slow_velocity:.2f} m/s')
-        self.get_logger().info(f'  Turn heading    : +/- {self.turn_heading:.1f}°')
         self.get_logger().info('=' * 58)
 
     def _declare_parameters(self):
@@ -93,11 +114,12 @@ class TrafficLightControllerNode(Node):
         _d('cruise_velocity', 0.6)        
         _d('slow_velocity', 0.3)          
         _d('heading', 0.0)                
-        _d('turn_heading', 30.0)          # degrees for left/right turns
+        _d('turn_heading', 30.0)          # Unused now, keeping for yaml compat
         _d('publish_rate', 20.0)          
         _d('state_topic', '/traffic_light/state')
         _d('sign_topic', '/sign/command')
-        _d('output_topic', '/teleop/raw_cmd')
+        _d('vehicle_state_topic', '/vehicle/state')
+        _d('output_topic', '/teleop/auto_cmd')
         _d('unknown_timeout', 2.0)        
 
     def _load_yaml_params(self) -> dict:
@@ -145,6 +167,22 @@ class TrafficLightControllerNode(Node):
         self.current_sign_state = state
         self.last_sign_time = time.time()
 
+    def _vehicle_state_callback(self, msg: VehicleState):
+        self.current_yaw = msg.yaw
+
+    # ===================================================================
+    # Helper Math
+    # ===================================================================
+    
+    @staticmethod
+    def _normalize_angle(angle):
+        """Normalize angle to [-π, π]."""
+        while angle > math.pi:
+            angle -= 2.0 * math.pi
+        while angle < -math.pi:
+            angle += 2.0 * math.pi
+        return angle
+
     # ===================================================================
     # Decision Logic
     # ===================================================================
@@ -163,37 +201,72 @@ class TrafficLightControllerNode(Node):
         else:
             eff_sign = self.current_sign_state
 
-        # 2. Velocity Logic (Most Restrictive Wins)
+        # 2. Velocity State Machine
         if eff_light == 'RED' or eff_sign == 'STOP':
-            self.target_velocity = 0.0
-        elif eff_light in ('YELLOW', 'UNKNOWN') or eff_sign in ('SLOW_DOWN', 'TURN_LEFT', 'TURN_RIGHT'):
-            # It's safer to slow down while turning
-            self.target_velocity = self.slow_velocity
+            self.velocity_state = 'STOP'
+        elif eff_light == 'YELLOW' or eff_sign == 'SLOW_DOWN':
+            self.velocity_state = 'SLOW'
         elif eff_light == 'GREEN':
-            self.target_velocity = self.cruise_velocity
-        else:
-            self.target_velocity = 0.0 # Fail-safe
+            self.velocity_state = 'FAST'
+        
+        # Determine target velocity based on state
+        if self.velocity_state == 'STOP':
+            target_speed = 0.0
+        elif self.velocity_state == 'SLOW':
+            target_speed = self.slow_velocity
+        else: # 'FAST'
+            target_speed = self.cruise_velocity
 
-        # 3. Heading Logic (ROS Standard: + is Left, - is Right)
-        if eff_sign == 'TURN_LEFT':
-            self.target_heading = -self.turn_heading
-        elif eff_sign == 'TURN_RIGHT':
-            self.target_heading = self.turn_heading
-        else:
-            self.target_heading = self.heading # Straight
+        # Asynchronously update speed controller parameter
+        if self.speed_client.service_is_ready():
+            self.speed_client.set_parameters_async([
+                Parameter('desired_speed', Parameter.Type.DOUBLE, float(target_speed))
+            ])
 
-        # 4. Smooth velocity transition (Ramp)
+        # 3. Turning State Machine
+        if self.turning_state == 'STRAIGHT':
+            if eff_sign == 'TURN_LEFT':
+                self.turning_state = 'TURNING_LEFT'
+                # +90 degrees = +pi/2 (positive is left in ROS)
+                self.target_yaw = self._normalize_angle(self.current_yaw + math.pi/2.0)
+            elif eff_sign == 'TURN_RIGHT':
+                self.turning_state = 'TURNING_RIGHT'
+                # -90 degrees = -pi/2
+                self.target_yaw = self._normalize_angle(self.current_yaw - math.pi/2.0)
+            
+            # Straight path uses base heading parameter
+            target_heading_deg = self.heading
+        else:
+            # We are currently in a turning state. Check for completion.
+            heading_error = self._normalize_angle(self.target_yaw - self.current_yaw)
+            
+            # If within 2 degrees of target yaw, turn is complete
+            if abs(math.degrees(heading_error)) < 2.0:
+                self.turning_state = 'STRAIGHT'
+                target_heading_deg = self.heading
+            else:
+                target_heading_deg = math.degrees(self.target_yaw)
+
+        # Asynchronously update lateral controller parameter
+        if self.lat_client.service_is_ready():
+            self.lat_client.set_parameters_async([
+                Parameter('desired_heading', Parameter.Type.DOUBLE, float(target_heading_deg))
+            ])
+
+        # 4. Smooth velocity transition (Ramp) for auto_cmd topic
         ramp_rate = 1.0  # m/s per second
         dt = 1.0 / self._p('publish_rate')
         max_change = ramp_rate * dt
 
-        diff = self.target_velocity - self.current_velocity
+        diff = target_speed - self.current_velocity
         if abs(diff) > max_change:
             self.current_velocity += max_change if diff > 0 else -max_change
         else:
-            self.current_velocity = self.target_velocity
+            self.current_velocity = target_speed
 
-        # 5. Publish
+        self.target_heading = target_heading_deg
+
+        # 5. Publish to auto_cmd (legacy support/arbiter fallback)
         msg = VehicleCmd()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = 'base_link'
@@ -205,13 +278,23 @@ class TrafficLightControllerNode(Node):
         light_icon = {'RED': '🔴', 'YELLOW': '🟡', 'GREEN': '🟢', 'UNKNOWN': '⚪'}.get(eff_light, '?')
         sign_icon = {'STOP': '🛑', 'SLOW_DOWN': '⚠️', 'TURN_LEFT': '⬅️', 'TURN_RIGHT': '➡️', 'NO_SIGNAL': '➖'}.get(eff_sign, '?')
 
+        hdg_err_deg = math.degrees(self._normalize_angle(self.target_yaw - self.current_yaw))
+        
         self.get_logger().info(
             f'[HLC] {light_icon}{eff_light:7s} | {sign_icon}{eff_sign:10s} || '
-            f'v={self.current_velocity:.2f}m/s | h={self.target_heading:.0f}°'
+            f'Vel: {self.velocity_state} ({self.current_velocity:.2f}m/s) | '
+            f'Turn: {self.turning_state} (tg={math.degrees(self.target_yaw):.0f}° err={hdg_err_deg:.0f}°) -> hdg={self.target_heading:.0f}°',
+            throttle_duration_sec=0.5
         )
 
     def destroy_node(self):
-        self.get_logger().info('Shutting down — sending stop command...')
+        self.get_logger().info('Shutting down — sending stop commands...')
+        
+        # Stop controllers
+        if self.speed_client.service_is_ready():
+            self.speed_client.set_parameters_async([Parameter('desired_speed', Parameter.Type.DOUBLE, 0.0)])
+        
+        # Stop fallback arbiter
         msg = VehicleCmd()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = 'base_link'

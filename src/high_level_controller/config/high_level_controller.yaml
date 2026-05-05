@@ -3,10 +3,10 @@
 
 traffic_light_controller_node:
   ros__parameters:
-    # Speed on GREEN light (m/s)
+    # Speed on GREEN or UNKOWN light (m/s)
     cruise_velocity: 0.25
 
-    # Speed on YELLOW, UNKNOWN, SLOW_DOWN, or while turning (m/s)
+    # Speed on YELLOW, SLOW_DOWN, or while turning (m/s)
     slow_velocity: 0.10
 
     # Default steering angle (degrees) — straight ahead
