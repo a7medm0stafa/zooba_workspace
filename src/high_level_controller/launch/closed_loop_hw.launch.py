@@ -69,7 +69,7 @@ def generate_launch_description():
         parameters=[{
             'serial_port': LaunchConfiguration('serial_port'),
             'baud_rate': 115200,
-            'max_velocity': 0.249,       # max ~ 71.95 RPM × 2π×0.033/60
+            'max_velocity': 0.25,       # max ~ 71.95 RPM × 2π×0.033/60
             'wheel_radius': 0.033,       # 33 mm wheel
             'servo_center': 90,
             'servo_min': 45,
