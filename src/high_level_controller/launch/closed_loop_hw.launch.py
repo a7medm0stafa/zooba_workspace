@@ -214,7 +214,7 @@ def generate_launch_description():
             {
                 'track_name':    LaunchConfiguration('track'),
                 'state_topic':   '/vehicle/state',
-                'start_delay':   3.0,
+                'start_delay':   10.0,
             }
         ],
     )

@@ -2,35 +2,25 @@
 closed_loop_sim.launch.py — Full Closed-Loop Simulation
 =========================================================
 FILE: zooba_simulation/launch/closed_loop_sim.launch.py
-STATUS: MODIFIED — replaced ground_truth_node with EKF localization
-MODIFIED: 2026-04-24
+STATUS: MODIFIED — uses ground_truth_node for localization, added path planner
+MODIFIED: 2026-05-06
 
-CHANGES MADE:
-    - REPLACED: localization/ground_truth_node (perfect Gazebo pose, no IMU sim)
-    - WITH:     localization/ekf_localization_node (EKF, uses /joint_states)
-    - The EKF runs in SIMULATION MODE (source='simulation')
-    - It subscribes to /joint_states published by Gazebo JointStatePublisher plugin
-    - Lower noise parameters since Gazebo joints are cleaner than real hardware
-
-GAZEBO ACKERMANN COMPATIBILITY:
-    The EKF node reads /joint_states from the gazebo_ackermann_steering_vehicle model.
-    Joint names used (from vehicle.xacro):
-        rear_left_wheel_joint       → velocity → linear speed v
-        rear_right_wheel_joint      → velocity → linear speed v
-        front_left_steering_joint   → position → steering angle δ → yaw rate ω
-    Yaw rate is computed from bicycle kinematics: ω = v·tan(δ)/wheelbase
+LOCALIZATION:
+    Simulation uses ground_truth_node (perfect Gazebo pose) for state estimation.
+    EKF localization is reserved for HARDWARE only (see closed_loop_hw.launch.py).
 
 WHAT THIS LAUNCHES:
     1. Gazebo + Ackermann vehicle model (via vehicle.launch.py)
-    2. Pose bridge (still available for ground truth comparison)
-    3. EKF Localization node (simulation mode → /joint_states → /vehicle/state)
+    2. Pose bridge (Gazebo world-frame pose → ROS)
+    3. Ground Truth Localization node (Gazebo pose → /vehicle/state)
     4. Simulation bridge node (/vehicle/cmd ↔ Gazebo + /vehicle/feedback)
     5. Speed control node (PI → /teleop/speed_cmd)
     6. Lateral control node (Extended Stanley → /teleop/lateral_cmd)
     7. Control merger node (merges → /vehicle/cmd)
+    8. Path planner node (optional — enabled via use_planner:=true)
 
 SIGNAL FLOW:
-    Gazebo → /joint_states → EKF Localization Node → /vehicle/state
+    Gazebo → /model/.../pose → Ground Truth Node → /vehicle/state
           → Speed Control + Lateral Control → speed_cmd + lateral_cmd
           → Control Merger → /vehicle/cmd
           → Simulation Bridge → /steering_angle + /velocity → Gazebo
@@ -48,9 +38,9 @@ USAGE:
     ros2 launch zooba_simulation closed_loop_sim.launch.py \\
         kp:=2.0 ki:=0.3 k_stanley:=3.0 k_d_heading:=1.0
 
-ROLLBACK (revert to ground truth):
-    1. Replace the ekf_localization Node definition with ground_truth_node
-    2. Change 'ekf_localization' to 'ground_truth' in LaunchDescription list
+    # Path planning with track 3:
+    ros2 launch zooba_simulation closed_loop_sim.launch.py \\
+        use_planner:=true track:=track_3
 """
 
 import os
@@ -59,6 +49,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.substitutions import LaunchConfiguration
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 
@@ -150,6 +141,24 @@ def generate_launch_description():
     )
 
     # ================================================================
+    # ---- Launch arguments: path planner ----------------------------
+    # ================================================================
+    track_arg = DeclareLaunchArgument(
+        'track', default_value='track_1',
+        description='Track for path planner (track_1, track_2, track_3)'
+    )
+    use_planner_arg = DeclareLaunchArgument(
+        'use_planner', default_value='false',
+        description='Enable path planner (overrides desired_speed/desired_y)'
+    )
+
+    # ================================================================
+    # ---- Config file paths -----------------------------------------
+    # ================================================================
+    hlc_pkg = get_package_share_directory('high_level_controller')
+    planner_config = os.path.join(hlc_pkg, 'config', 'path_planner_config.yaml')
+
+    # ================================================================
     # ---- 1. Gazebo + vehicle model ---------------------------------
     # ================================================================
     gazebo_pkg = get_package_share_directory('gazebo_ackermann_steering_vehicle')
@@ -182,34 +191,7 @@ def generate_launch_description():
     )
 
     # ================================================================
-    # ---- 2b. EKF Localization (simulation mode — uses joint_states) -
-    # ================================================================
-    ekf_localization = Node(
-        package='localization',
-        executable='ekf_localization_node',
-        name='ekf_localization_node',
-        output='screen',
-        parameters=[{
-            'source': 'simulation',
-            'wheelbase': 0.22,
-            'wheel_radius': 0.04,
-            'state_topic': '/vehicle/state',
-            'publish_rate': 50.0,
-            # Simulation: lower noise since Gazebo joints are clean
-            'process_noise_x': 0.005,
-            'process_noise_y': 0.005,
-            'process_noise_yaw': 0.002,
-            'process_noise_vel': 0.05,
-            'process_noise_gyro_bias': 0.0001,
-            'encoder_velocity_noise': 0.02,
-            'gyro_rate_noise': 0.005,
-            'imu_yaw_noise': 0.1,
-            'zupt_velocity_threshold': 0.01,
-        }],
-    )
-
-    # ================================================================
-    # ---- 2b_gt. Ground Truth Localization (for comparison) ---------
+    # ---- 2b. Ground Truth Localization (Gazebo pose → /vehicle/state)
     # ================================================================
     ground_truth = Node(
         package='localization',
@@ -218,8 +200,8 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'pose_topic':   '/model/ackermann_steering_vehicle/pose',
-            'state_topic':  '/vehicle/state_gt',  # DIFFERENT TOPIC!
-            'publish_rate': 50.0,
+            'state_topic':  '/vehicle/state',
+            'publish_rate': 20.0,
             'wheel_radius': 0.04,
             'wheelbase':    0.22,
         }],
@@ -302,19 +284,24 @@ def generate_launch_description():
         }],
     )
 
-    # # ================================================================
-    # # ---- 6. Non-holonomic constraints node -------------------------
-    # # ================================================================
-    # mid_pkg = get_package_share_directory('mid_level_controller')
-    # constraints_config = os.path.join(mid_pkg, 'config', 'vehicle_constraints.yaml')
-
-    # constraints_node = Node(
-    #     package='mid_level_controller',
-    #     executable='nonholonomic_constraints_node',
-    #     name='nonholonomic_constraints_node',
-    #     output='screen',
-    #     parameters=[constraints_config],
-    # )
+    # ================================================================
+    # ---- 6. Path planner node (optional — use_planner:=true) -------
+    # ================================================================
+    path_planner = Node(
+        package='high_level_controller',
+        executable='path_planner_node',
+        name='path_planner_node',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('use_planner')),
+        parameters=[
+            planner_config,
+            {
+                'track_name':    LaunchConfiguration('track'),
+                'state_topic':   '/vehicle/state',
+                'start_delay':   3.0,
+            }
+        ],
+    )
 
     # ================================================================
     return LaunchDescription([
@@ -324,14 +311,16 @@ def generate_launch_description():
         desired_speed_arg, kp_arg, ki_arg, max_velocity_arg,
         desired_y_arg, desired_heading_arg,
         k_heading_arg, k_stanley_arg, k_soft_arg, k_d_heading_arg, max_steering_arg,
+        track_arg, use_planner_arg,
         # --- then launch everything ---
         vehicle_launch,
         pose_bridge,
-        ekf_localization,
         ground_truth,
         sim_bridge,
+        # Path planner (conditional)
+        path_planner,
+        # Controllers
         speed_control,
         lateral_control,
         cmd_merger,
-        # constraints_node,
     ])
