@@ -39,7 +39,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 
@@ -114,10 +114,8 @@ def generate_launch_description():
         [LaunchConfiguration('track'), '.world']
     ])
 
-    # Determine initial Y based on track (Track 3 starts at Y=1.75)
-    initial_y = PythonExpression([
-        "'1.75' if '", LaunchConfiguration('track'), "' == 'track_3' else '0.0'"
-    ])
+    # All tracks start at (0, 0) — unified origin for sim and hardware
+    initial_y = '0.0'
 
     vehicle_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
