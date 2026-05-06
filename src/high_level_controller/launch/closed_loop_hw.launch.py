@@ -89,9 +89,9 @@ def generate_launch_description():
             'baud_rate': 115200,
             'max_velocity': 0.249,       # max ~ 71.95 RPM × 2π×0.033/60
             'wheel_radius': 0.033,       # 33 mm wheel
-            'servo_center': 90,
-            'servo_min': 45,
-            'servo_max': 135,
+            'servo_center': 85,
+            'servo_min': 40,
+            'servo_max': 130,
             'max_steering_angle': 45.0,
             'cmd_topic': '/vehicle/cmd',
             'feedback_topic': '/vehicle/feedback',
