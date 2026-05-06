@@ -116,7 +116,7 @@ def generate_launch_description():
 
     # Determine initial Y based on track (Track 3 starts at Y=1.75)
     initial_y = PythonExpression([
-        "'1.75' if '", LaunchConfiguration('track'), "' == 'track_3' else '0.1875'"
+        "'1.75' if '", LaunchConfiguration('track'), "' == 'track_3' else '0.0'"
     ])
 
     vehicle_launch = IncludeLaunchDescription(

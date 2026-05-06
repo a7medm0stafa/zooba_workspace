@@ -179,10 +179,13 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
     """
 
     if track_name == 'track_1':
-        # Simple straight lane keeping at Y=0.1875 (left lane center)
-        # Start at X=0, end at X=10
+        # Straight lane keeping — start at origin, merge into left lane
+        # Vehicle starts at (0,0), transitions to Y=0.1875, then drives straight
         return [
-            (0.0, 0.1875),
+            (0.0, 0.0),            # START at origin
+            (0.5, 0.0),            # settle straight
+            (1.0, 0.1),            # begin merge into left lane
+            (1.5, 0.1875),         # in left lane
             (2.5, 0.1875),
             (5.0, 0.1875),
             (7.5, 0.1875),
@@ -194,32 +197,32 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
         #   Obstacle 1: X=4, Y=0.1875, blocks left lane (size 0.1 x 0.375)
         #   Obstacle 2: X=8, Y=-0.1875, blocks right lane (size 0.1 x 0.375)
         #
-        # Strategy: start in left lane, switch right before Obs1,
-        #           stay right, switch left before Obs2, finish
+        # Strategy: start at origin, merge into left lane, switch right
+        #           before Obs1, switch left before Obs2, finish
         return [
-            (0.0,  0.1875),     # start in left lane
-            (0.5,  0.1875),     # anchor straight
-            (1.0,  0.1875),     # anchor straight
-            (1.5,  0.1875),     # anchor straight
-            (2.0,  0.1875),     # anchor straight
-            (2.5,  0.1875),     # approach zone before obstacle 1
-            (2.8,  0.1875),     # hold lane until last moment
-            (3.2,  0.0),        # begin lane change to right
-            (3.6, -0.1875),     # in right lane before obstacle 1
-            (4.0, -0.1875),     # passing obstacle 1
-            (4.5, -0.1875),     # anchor right lane
-            (5.0, -0.1875),     # cruising right lane
-            (5.5, -0.1875),     # anchor right lane
-            (6.0, -0.1875),     # anchor right lane
-            (6.5, -0.1875),     # approach zone before obstacle 2
-            (6.8, -0.1875),     # hold lane until last moment
-            (7.2,  0.0),        # begin lane change to left
-            (7.6,  0.1875),     # in left lane before obstacle 2
-            (8.0,  0.1875),     # passing obstacle 2
-            (8.5,  0.1875),     # anchor left lane
-            (9.0,  0.1875),     # past obstacle 2
-            (9.5,  0.1875),     # anchor straight
-            (10.0, 0.1875),     # finish
+            (0.0,  0.0),           # START at origin
+            (0.5,  0.0),           # settle straight
+            (1.0,  0.1),           # begin merge into left lane
+            (1.5,  0.1875),        # in left lane
+            (2.0,  0.1875),        # anchor straight
+            (2.5,  0.1875),        # approach zone before obstacle 1
+            (2.8,  0.1875),        # hold lane until last moment
+            (3.2,  0.0),           # begin lane change to right
+            (3.6, -0.1875),        # in right lane before obstacle 1
+            (4.0, -0.1875),        # passing obstacle 1
+            (4.5, -0.1875),        # anchor right lane
+            (5.0, -0.1875),        # cruising right lane
+            (5.5, -0.1875),        # anchor right lane
+            (6.0, -0.1875),        # anchor right lane
+            (6.5, -0.1875),        # approach zone before obstacle 2
+            (6.8, -0.1875),        # hold lane until last moment
+            (7.2,  0.0),           # begin lane change to left
+            (7.6,  0.1875),        # in left lane before obstacle 2
+            (8.0,  0.1875),        # passing obstacle 2
+            (8.5,  0.1875),        # anchor left lane
+            (9.0,  0.1875),        # past obstacle 2
+            (9.5,  0.1875),        # anchor straight
+            (10.0, 0.1875),        # finish
         ], False  # not closed
 
     elif track_name == 'track_3':
