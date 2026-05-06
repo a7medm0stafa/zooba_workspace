@@ -125,7 +125,7 @@ def generate_launch_description():
 
     # ---- Classic Odometry node (dead-reckoning fallback) ----
     odometry_node = Node(
-        package='mid_level_controller',
+        package='localization',
         executable='odometry_node',
         name='odometry_node',
         output='screen',
