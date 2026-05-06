@@ -18,10 +18,10 @@ lateral_control_node:
   ros__parameters:
     desired_y: 0.0            # Target lateral position (lane) [m]
     desired_heading: 0.0      # Target heading [degrees] (0 = +X, 90 = +Y)
-    k_heading: 1.5            # Heading proportional gain
-    k_stanley: 2.5            # Cross-track gain
+    k_heading: 3.0            # Heading proportional gain
+    k_stanley: 5.0            # Cross-track gain
     k_soft: 1.0               # Softening constant (avoids div-by-zero)
-    k_d_heading: 0.3          # Heading derivative damping gain
+    k_d_heading: 0.1          # Heading derivative damping gain
     max_steering_angle: 45.0  # Steering output saturation [degrees]
 
 control_merger_node:

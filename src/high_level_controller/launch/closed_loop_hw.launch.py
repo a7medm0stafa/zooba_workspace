@@ -47,6 +47,22 @@ def generate_launch_description():
         'serial_port', default_value='/dev/ttyACM0',
         description='Arduino serial port'
     )
+    desired_speed_arg = DeclareLaunchArgument(
+        'desired_speed', default_value='0.15',
+        description='Goal speed [m/s]'
+    )
+    desired_y_arg = DeclareLaunchArgument(
+        'desired_y', default_value='0.0',
+        description='Goal lateral position [m]'
+    )
+    track_arg = DeclareLaunchArgument(
+        'track', default_value='track_1',
+        description='Track for path planner (track_1, track_2, track_3)'
+    )
+    use_planner_arg = DeclareLaunchArgument(
+        'use_planner', default_value='false',
+        description='Enable path planner (overrides desired_speed/desired_y)'
+    )
 
     # ---- Config file paths ----
     ekf_config = os.path.join(
@@ -59,6 +75,8 @@ def generate_launch_description():
     )
     mid_pkg = get_package_share_directory('mid_level_controller')
     constraints_config = os.path.join(mid_pkg, 'config', 'vehicle_constraints.yaml')
+    hlc_pkg = get_package_share_directory('high_level_controller')
+    planner_config = os.path.join(hlc_pkg, 'config', 'path_planner_config.yaml')
 
     # ---- Low-level controller node (Arduino PI for speed) ----
     low_level_node = Node(
@@ -71,9 +89,9 @@ def generate_launch_description():
             'baud_rate': 115200,
             'max_velocity': 0.25,       # max ~ 71.95 RPM × 2π×0.033/60
             'wheel_radius': 0.033,       # 33 mm wheel
-            'servo_center': 90,
-            'servo_min': 45,
-            'servo_max': 135,
+            'servo_center': 85,
+            'servo_min': 40,
+            'servo_max': 130,
             'max_steering_angle': 45.0,
             'cmd_topic': '/vehicle/cmd',
             'feedback_topic': '/vehicle/feedback',
@@ -107,7 +125,7 @@ def generate_launch_description():
 
     # ---- Classic Odometry node (dead-reckoning fallback) ----
     odometry_node = Node(
-        package='mid_level_controller',
+        package='localization',
         executable='odometry_node',
         name='odometry_node',
         output='screen',
@@ -134,6 +152,7 @@ def generate_launch_description():
         parameters=[
             control_config,
             {
+                'desired_speed': LaunchConfiguration('desired_speed'),
                 'control_rate': 20.0,
                 'state_topic': '/vehicle/state',
                 'output_topic': '/teleop/speed_cmd',
@@ -151,6 +170,7 @@ def generate_launch_description():
         parameters=[
             control_config,
             {
+                'desired_y': LaunchConfiguration('desired_y'),
                 'control_rate': 20.0,
                 'invert_steering_output': False,
                 'state_topic': '/vehicle/state',
@@ -182,14 +202,37 @@ def generate_launch_description():
         parameters=[constraints_config],
     )
 
+    # ---- Path planner node (optional — enabled via use_planner:=true) ----
+    path_planner_node = Node(
+        package='high_level_controller',
+        executable='path_planner_node',
+        name='path_planner_node',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('use_planner')),
+        parameters=[
+            planner_config,
+            {
+                'track_name':    LaunchConfiguration('track'),
+                'state_topic':   '/vehicle/state',
+                'start_delay':   10.0,
+            }
+        ],
+    )
+
     return LaunchDescription([
         # Arguments
         use_ekf_arg,
         serial_port_arg,
+        desired_speed_arg,
+        desired_y_arg,
+        track_arg,
+        use_planner_arg,
         # Hardware
         low_level_node,
         ekf_node,
         odometry_node,
+        # Path planner (conditional)
+        path_planner_node,
         # Controllers
         speed_control_node,
         lateral_control_node,

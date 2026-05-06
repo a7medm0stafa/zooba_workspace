@@ -18,6 +18,9 @@ setup(
         # Include config files
         (os.path.join('share', package_name, 'config'),
             glob(os.path.join('config', '*.yaml')) + glob(os.path.join('config', '*.rviz'))),
+        # Include worlds
+        (os.path.join('share', package_name, 'worlds'),
+            glob(os.path.join('worlds', '*.world'))),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

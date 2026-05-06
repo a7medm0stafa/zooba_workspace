@@ -1,6 +1,31 @@
 """
+FILE: zooba_simulation/launch/closed_loop_sim.launch.py
+STATUS: MODIFIED — uses ground_truth_node for localization, added path planner
+MODIFIED: 2026-05-06
+
+LOCALIZATION:
+    Simulation uses ground_truth_node (perfect Gazebo pose) for state estimation.
+    EKF localization is reserved for HARDWARE only (see closed_loop_hw.launch.py).
+
+WHAT THIS LAUNCHES:
+    1. Gazebo + Ackermann vehicle model (via vehicle.launch.py)
+    2. Pose bridge (Gazebo world-frame pose → ROS)
+    3. Ground Truth Localization node (Gazebo pose → /vehicle/state)
+    4. Simulation bridge node (/vehicle/cmd ↔ Gazebo + /vehicle/feedback)
+    5. Speed control node (PI → /teleop/speed_cmd)
+    6. Lateral control node (Extended Stanley → /teleop/lateral_cmd)
+    7. Control merger node (merges → /vehicle/cmd)
+    8. Path planner node (optional — enabled via use_planner:=true)
+
+SIGNAL FLOW:
+    Gazebo → /model/.../pose → Ground Truth Node → /vehicle/state
+          → Speed Control + Lateral Control → speed_cmd + lateral_cmd
+          → Control Merger → /vehicle/cmd
+          → Simulation Bridge → /steering_angle + /velocity → Gazebo
+
+USAGE:
+    # Defaults (0.3 m/s, lane y=1.0, spawn at origin):
 closed_loop_sim.launch.py
-==========================
 Full closed-loop simulation with perception and high-level controller.
 
 Launches:
@@ -141,6 +166,24 @@ def generate_launch_description():
     )
 
     # ================================================================
+    # ---- Launch arguments: path planner ----------------------------
+    # ================================================================
+    track_arg = DeclareLaunchArgument(
+        'track', default_value='track_1',
+        description='Track for path planner (track_1, track_2, track_3)'
+    )
+    use_planner_arg = DeclareLaunchArgument(
+        'use_planner', default_value='false',
+        description='Enable path planner (overrides desired_speed/desired_y)'
+    )
+
+    # ================================================================
+    # ---- Config file paths -----------------------------------------
+    # ================================================================
+    hlc_pkg = get_package_share_directory('high_level_controller')
+    planner_config = os.path.join(hlc_pkg, 'config', 'path_planner_config.yaml')
+
+    # ================================================================
     # ---- 1. Gazebo + vehicle model ---------------------------------
     # ================================================================
     gazebo_pkg = get_package_share_directory('gazebo_ackermann_steering_vehicle')
@@ -173,7 +216,7 @@ def generate_launch_description():
     )
 
     # ================================================================
-    # ---- 2b. Ground Truth Localization (from localization package) --
+    # ---- 2b. Ground Truth Localization (Gazebo pose → /vehicle/state)
     # ================================================================
     ground_truth = Node(
         package='localization',
@@ -321,6 +364,7 @@ def generate_launch_description():
         desired_speed_arg, kp_arg, ki_arg, max_velocity_arg,
         desired_y_arg, desired_heading_arg,
         k_heading_arg, k_stanley_arg, k_soft_arg, k_d_heading_arg, max_steering_arg,
+        track_arg, use_planner_arg,
         # --- then launch everything ---
         vehicle_launch,
         pose_bridge,

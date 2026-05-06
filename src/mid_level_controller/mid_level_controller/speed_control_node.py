@@ -32,10 +32,10 @@ class SpeedControlNode(Node):
         super().__init__('speed_control_node')
 
         # ---- Parameters ----
-        self.declare_parameter('desired_speed', 0.5)       # m/s
-        self.declare_parameter('kp', 1.0)
+        self.declare_parameter('desired_speed', 0.20)      # m/s (safe default)
+        self.declare_parameter('kp', 1.2)
         self.declare_parameter('ki', 0.1)
-        self.declare_parameter('max_velocity', 2.0)        # m/s saturation
+        self.declare_parameter('max_velocity', 0.21)       # m/s saturation (hardware limit)
         self.declare_parameter('control_rate', 20.0)       # Hz
         self.declare_parameter('state_topic', '/vehicle/state')
         self.declare_parameter('output_topic', '/teleop/speed_cmd')

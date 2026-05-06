@@ -42,10 +42,11 @@ class LateralControlNode(Node):
         super().__init__('lateral_control_node')
 
         # ---- Parameters ----
-        self.declare_parameter('desired_y', 0.0)               # target lateral position [m]
+        self.declare_parameter('desired_x', 0.0)               # target X position [m]
+        self.declare_parameter('desired_y', 0.0)               # target Y position [m]
         self.declare_parameter('desired_heading', 0.0)         # target heading [degrees]
-        self.declare_parameter('k_heading', 1.5)               # heading proportional gain
-        self.declare_parameter('k_stanley', 2.5)               # cross-track gain
+        self.declare_parameter('k_heading', 3.0)               # heading proportional gain
+        self.declare_parameter('k_stanley', 5.0)               # cross-track gain
         self.declare_parameter('k_soft', 1.0)                  # softening constant
         self.declare_parameter('k_d_heading', 0.3)             # heading derivative damping
         self.declare_parameter('max_steering_angle', 35.0)     # degrees
@@ -54,6 +55,7 @@ class LateralControlNode(Node):
         self.declare_parameter('state_topic', '/vehicle/state')
         self.declare_parameter('output_topic', '/teleop/lateral_cmd')
 
+        self.desired_x = self.get_parameter('desired_x').value
         self.desired_y = self.get_parameter('desired_y').value
         self.desired_heading = self.get_parameter('desired_heading').value          # degrees
         self.desired_heading_rad = math.radians(self.desired_heading)               # radians (internal)
@@ -72,9 +74,9 @@ class LateralControlNode(Node):
         self.current_y = 0.0
         self.current_yaw = 0.0
         self.current_velocity = 0.0
+        self.current_yaw_rate = 0.0
 
-        # ---- Derivative state for heading damping ----
-        self.prev_heading_error = 0.0
+        # ---- Timer State ----
         self.last_time = self.get_clock().now()
 
         # ---- Subscriber ----
@@ -92,6 +94,7 @@ class LateralControlNode(Node):
 
         self.get_logger().info('=' * 55)
         self.get_logger().info('Lateral Control Node Started (Extended Stanley)')
+        self.get_logger().info(f'  Desired X       : {self.desired_x:.2f} m')
         self.get_logger().info(f'  Desired Y       : {self.desired_y:.2f} m')
         self.get_logger().info(f'  Desired heading : {self.desired_heading:.1f}° ({self.desired_heading_rad:.4f} rad)')
         self.get_logger().info(f'  k_heading       : {self.k_heading}')
@@ -99,7 +102,7 @@ class LateralControlNode(Node):
         self.get_logger().info(f'  k_soft          : {self.k_soft}')
         self.get_logger().info(f'  k_d_heading     : {self.k_d_heading}')
         self.get_logger().info(f'  Max steering    : ±{self.max_steering_angle:.1f}°')
-        self.get_logger().info(f'  Invert output   : {self.invert_steering_output}')
+        self.get_logger().info(f'  Invert Output   : {self.invert_steering_output}')
         self.get_logger().info(f'  Control rate    : {control_rate:.0f} Hz')
         self.get_logger().info(f'  State topic     : {state_topic}')
         self.get_logger().info(f'  Output topic    : {output_topic}')
@@ -109,15 +112,14 @@ class LateralControlNode(Node):
         """Handle dynamic parameter updates."""
         from rcl_interfaces.msg import SetParametersResult
         for param in params:
-            if param.name == 'desired_y':
+            if param.name == 'desired_x':
+                self.desired_x = param.value
+            elif param.name == 'desired_y':
                 self.desired_y = param.value
-                self.prev_heading_error = 0.0   # reset derivative on setpoint change
-                self.get_logger().info(f'[Stanley] desired_y updated: {param.value:.2f} m')
             elif param.name == 'desired_heading':
                 self.desired_heading = param.value
                 self.desired_heading_rad = math.radians(param.value)
                 self.prev_heading_error = 0.0
-                self.get_logger().info(f'[Stanley] desired_heading updated: {param.value:.1f}° ({self.desired_heading_rad:.4f} rad)')
             elif param.name == 'k_heading':
                 self.k_heading = param.value
             elif param.name == 'k_stanley':
@@ -134,6 +136,7 @@ class LateralControlNode(Node):
         self.current_y = msg.y
         self.current_yaw = msg.yaw
         self.current_velocity = msg.velocity
+        self.current_yaw_rate = msg.yaw_rate
 
     def _control_callback(self):
         """Extended Stanley control loop — compute and publish steering command."""
@@ -148,13 +151,14 @@ class LateralControlNode(Node):
         heading_error = self._normalize_angle(self.desired_heading_rad - self.current_yaw)
 
         # --- Derivative of heading error (damping) ---
-        d_heading = self._normalize_angle(heading_error - self.prev_heading_error) / dt
-        self.prev_heading_error = heading_error
+        # To avoid "derivative kick" when desired_heading changes, we damp the 
+        # process variable (yaw rate) directly instead of the error derivative.
+        d_heading = -self.current_yaw_rate
 
         # --- Cross-track error (perpendicular distance to desired path line) ---
-        # Path: line through (0, desired_y) in direction desired_heading_rad
+        # Path: line through (desired_x, desired_y) in direction desired_heading_rad
         # Positive CTE = car needs to steer left to reach the path
-        dx = self.current_x
+        dx = self.current_x - self.desired_x
         dy = self.current_y - self.desired_y
         cross_track_error = dx * math.sin(self.desired_heading_rad) \
                           - dy * math.cos(self.desired_heading_rad)
@@ -175,6 +179,7 @@ class LateralControlNode(Node):
         # Apply hardware/sim inversion 
         if self.invert_steering_output:
             steering_deg = -steering_deg
+            
         steering_deg = max(-self.max_steering_angle,
                            min(self.max_steering_angle, steering_deg))
 
