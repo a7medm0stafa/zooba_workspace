@@ -237,7 +237,7 @@ class TrafficLightControllerNode(Node):
 
         # Asynchronously update speed controller parameter
         if self.speed_client.services_are_ready():
-            self.speed_client.set_parameters_async([
+            self.speed_client.set_parameters([
                 Parameter('desired_speed', Parameter.Type.DOUBLE, float(target_speed))
             ])
 
@@ -305,7 +305,7 @@ class TrafficLightControllerNode(Node):
 
         # 5. Asynchronously update lateral controller parameter
         if self.lat_client.services_are_ready():
-            self.lat_client.set_parameters_async([
+            self.lat_client.set_parameters([
                 Parameter('desired_heading', Parameter.Type.DOUBLE,
                           float(target_heading_deg))
             ])
@@ -338,7 +338,7 @@ class TrafficLightControllerNode(Node):
         
         # Set speed to 0
         if self.speed_client.services_are_ready():
-            self.speed_client.set_parameters_async([
+            self.speed_client.set_parameters([
                 Parameter('desired_speed', Parameter.Type.DOUBLE, 0.0)
             ])
         
