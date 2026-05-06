@@ -55,7 +55,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'output_topic': LaunchConfiguration('output_topic'),
-            'max_velocity': 0.249,  # physical max: 71.95 RPM × 2π×0.033/60
+            'max_velocity': 0.25,  # physical max: 71.95 RPM × 2π×0.033/60
             'max_heading': 45.0,
             'axis_steering': 0,
             'axis_forward': 5, # R2/RT

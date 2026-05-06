@@ -31,7 +31,7 @@ class LowLevelControllerNode(Node):
         # --------------- Declare ROS2 Parameters ---------------
         self.declare_parameter('serial_port', '/dev/ttyACM0')
         self.declare_parameter('baud_rate', 115200)
-        self.declare_parameter('max_velocity', 1.0)        # m/s
+        self.declare_parameter('max_velocity', 0.25)        # m/s
         self.declare_parameter('wheel_radius', 0.033)      # meters (for feedback conversion)
         self.declare_parameter('servo_center', 85)          # degrees (straight)
         self.declare_parameter('servo_min', 40)             # degrees (full right)

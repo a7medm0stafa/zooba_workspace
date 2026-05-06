@@ -1,27 +1,35 @@
 """
-Launch file for the full autonomous driving stack.
+Launch file for the full autonomous driving stack on hardware.
+================================================================
 
 Launches the complete pipeline:
     1. camera_publisher_node       (perception — single camera owner)
     2. sign_detection_node         (perception — subscribes to camera topic)
     3. traffic_light_detector_node (perception — subscribes to camera topic)
-    4. traffic_light_controller_node (high-level — publishes to /teleop/auto_cmd)
-    5. command_arbiter_node        (high-level — merges joy + auto → /teleop/raw_cmd)
-    6. nonholonomic_constraints_node (mid-level — /teleop/raw_cmd → /vehicle/cmd)
-    7. low_level_controller_node   (low-level — /vehicle/cmd → hardware)
+    4. traffic_light_controller_node (HLC — sets params on Stanley + PI)
+    5. low_level_controller_node   (LLC — /vehicle/cmd → Arduino serial)
+    6. odometry_node               (localization — encoder+IMU → /vehicle/state)
+    7. speed_control_node          (MLC — PI speed → /teleop/speed_cmd)
+    8. lateral_control_node        (MLC — Stanley → /teleop/lateral_cmd)
+    9. control_merger_node         (MLC — merges into /teleop/raw_cmd)
+   10. nonholonomic_constraints_node (MLC — /teleop/raw_cmd → /vehicle/cmd)
+
+Data Flow:
+    Perception → HLC (sets params) → MLC (Stanley + PI) → Merger
+        → Constraints → /vehicle/cmd → LLC → Arduino
+    Arduino → feedback+IMU → Odometry → /vehicle/state → MLC + HLC
 
 Manual override:
     Launch this file, then in another terminal run the joystick:
-        ros2 launch mid_level_controller joy_teleop.launch.py output_topic:=/teleop/joy_cmd
-
-    The arbiter will use joystick commands as base, but perception safety
-    overrides (STOP, SLOW) always apply.
+        ros2 launch mid_level_controller joy_teleop.launch.py
+    The joystick publishes to /teleop/raw_cmd which goes through constraints.
+    (There is no arbiter — joy and auto cannot coexist simultaneously.)
 
 Usage:
     # Full stack:
     ros2 launch high_level_controller high_level_controller.launch.py
 
-    # Without perception (e.g. for testing controllers only):
+    # Without perception (controller-only testing):
     ros2 launch high_level_controller high_level_controller.launch.py with_perception:=false
 """
 
@@ -41,7 +49,7 @@ def generate_launch_description():
     hlc_config = os.path.join(hlc_share, 'config', 'high_level_controller.yaml')
 
     mlc_share = get_package_share_directory('mid_level_controller')
-    mlc_config = os.path.join(mlc_share, 'config', 'vehicle_constraints.yaml')
+    constraints_config = os.path.join(mlc_share, 'config', 'vehicle_constraints.yaml')
 
     # ---- Launch arguments ----
     hlc_config_arg = DeclareLaunchArgument(
@@ -50,7 +58,7 @@ def generate_launch_description():
     )
 
     mlc_config_arg = DeclareLaunchArgument(
-        'mlc_config', default_value=mlc_config,
+        'mlc_config', default_value=constraints_config,
         description='Path to mid-level controller (constraints) YAML config'
     )
 
@@ -123,32 +131,96 @@ def generate_launch_description():
         }],
     )
 
-    # ---- 4. Traffic Light Controller (High-Level) ----
+    # ---- 4. High-Level Controller (HLC) ----
+    # Sets desired_heading and desired_speed on MLC nodes via AsyncParameterClient.
+    # Does NOT publish VehicleCmd — the MLC handles closed-loop control.
     traffic_light_controller = Node(
         package='high_level_controller',
         executable='traffic_light_controller_node',
         name='traffic_light_controller_node',
         output='screen',
+        condition=IfCondition(LaunchConfiguration('with_perception')),
         parameters=[LaunchConfiguration('hlc_config')],
     )
 
-    # ---- 5. Command Arbiter (High-Level) ----
-    command_arbiter = Node(
-        package='high_level_controller',
-        executable='command_arbiter_node',
-        name='command_arbiter_node',
+    # ---- 5. Low-Level Controller ----
+    low_level_node = Node(
+        package='low_level_controller',
+        executable='low_level_controller_node',
+        name='low_level_controller_node',
+        output='screen',
+    )
+
+    # ---- 6. Odometry (Localization — IMU + Encoder Dead-Reckoning) ----
+    odometry_node = Node(
+        package='localization',
+        executable='odometry_node',
+        name='odometry_node',
         output='screen',
         parameters=[{
-            'joy_topic': '/teleop/joy_cmd',
-            'auto_topic': '/teleop/auto_cmd',
+            'feedback_topic': '/vehicle/feedback',
+            'imu_topic': '/vehicle/imu',
+            'state_topic': '/vehicle/state',
+            'publish_rate': 20.0,
+            'wheel_radius': 0.033,
+            'ticks_per_rev': 1968,
+            'initial_x': 0.0,
+            'initial_y': 0.0,
+            'initial_yaw': 0.0,
+        }],
+    )
+
+    # ---- 7. Speed Control Node (PI — bypass mode, Arduino handles PI) ----
+    speed_control_node = Node(
+        package='mid_level_controller',
+        executable='speed_control_node',
+        name='speed_control_node',
+        output='screen',
+        parameters=[{
+            'desired_speed': 0.25,
+            'control_rate': 20.0,
+            'state_topic': '/vehicle/state',
+            'output_topic': '/teleop/speed_cmd',
+            'bypass_pi': True,   # Arduino handles PI speed control
+        }],
+    )
+
+    # ---- 8. Lateral Control Node (Stanley) ----
+    lateral_control_node = Node(
+        package='mid_level_controller',
+        executable='lateral_control_node',
+        name='lateral_control_node',
+        output='screen',
+        parameters=[{
+            'desired_heading': 0.0,
+            'desired_y': 0.0,
+            'k_heading': 1.5,
+            'k_stanley': 2.5,
+            'k_soft': 1.0,
+            'k_d_heading': 0.3,
+            'max_steering_angle': 35.0,
+            'control_rate': 20.0,
+            'invert_steering_output': False,
+            'state_topic': '/vehicle/state',
+            'output_topic': '/teleop/lateral_cmd',
+        }],
+    )
+
+    # ---- 9. Control Merger Node ----
+    merger_node = Node(
+        package='mid_level_controller',
+        executable='control_merger_node',
+        name='control_merger_node',
+        output='screen',
+        parameters=[{
+            'speed_topic': '/teleop/speed_cmd',
+            'lateral_topic': '/teleop/lateral_cmd',
             'output_topic': '/teleop/raw_cmd',
-            'joy_timeout': 0.5,
-            'slow_velocity': 0.3,
             'publish_rate': 20.0,
         }],
     )
 
-    # ---- 6. Non-Holonomic Constraints (Mid-Level) ----
+    # ---- 10. Non-Holonomic Constraints (HW only) ----
     constraints_node = Node(
         package='mid_level_controller',
         executable='nonholonomic_constraints_node',
@@ -157,15 +229,7 @@ def generate_launch_description():
         parameters=[LaunchConfiguration('mlc_config')],
     )
 
-    # ---- 7. Low-Level Controller ----
-    low_level_node = Node(
-        package='low_level_controller',
-        executable='low_level_controller_node',
-        name='low_level_controller_node',
-        output='screen',
-    )
-
-    # ---- 8. Dashboard HUD (optional, when GUI is enabled) ----
+    # ---- 11. Dashboard HUD (optional) ----
     dashboard = Node(
         package='perception',
         executable='dashboard_node',
@@ -191,13 +255,18 @@ def generate_launch_description():
         camera_publisher,
         sign_detection,
         traffic_light_detector,
-        # High-level
+        # High-level (sets params on MLC — no VehicleCmd)
         traffic_light_controller,
-        command_arbiter,
-        # Mid-level
-        constraints_node,
         # Low-level
         low_level_node,
+        # Localization
+        odometry_node,
+        # Mid-level controllers
+        speed_control_node,
+        lateral_control_node,
+        merger_node,
+        # Constraints (HW only)
+        constraints_node,
         # Dashboard
         dashboard,
     ])
