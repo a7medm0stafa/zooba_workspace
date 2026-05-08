@@ -29,7 +29,7 @@ def generate_launch_description():
         'state_topic', default_value='/vehicle/state',
         description='Output vehicle state topic (VehicleState)')
     wheel_radius_arg = DeclareLaunchArgument(
-        'wheel_radius', default_value='0.04',
+        'wheel_radius', default_value='0.033',
         description='Wheel radius [m]')
     ticks_per_rev_arg = DeclareLaunchArgument(
         'ticks_per_rev', default_value='1968',

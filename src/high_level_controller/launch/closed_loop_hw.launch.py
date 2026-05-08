@@ -16,7 +16,7 @@ CONFIGURATION:
         localization/config/ekf_localization.yaml
 
     All speed + lateral control parameters are loaded from:
-        mid_level_controller/config/closed_loop_control.yaml
+        mid_level_controller/config/controller_params.yaml
 
 USAGE:
     # Default (EKF + Arduino PI):
@@ -71,10 +71,10 @@ def generate_launch_description():
     )
     control_config = os.path.join(
         get_package_share_directory('mid_level_controller'),
-        'config', 'closed_loop_control.yaml'
+        'config', 'controller_params.yaml'
     )
     mid_pkg = get_package_share_directory('mid_level_controller')
-    constraints_config = os.path.join(mid_pkg, 'config', 'vehicle_constraints.yaml')
+    constraints_config = os.path.join(mid_pkg, 'config', 'vehicle_params.yaml')
     hlc_pkg = get_package_share_directory('high_level_controller')
     planner_config = os.path.join(hlc_pkg, 'config', 'path_planner_config.yaml')
 
@@ -87,7 +87,7 @@ def generate_launch_description():
         parameters=[{
             'serial_port': LaunchConfiguration('serial_port'),
             'baud_rate': 115200,
-            'max_velocity': 0.249,       # max ~ 71.95 RPM × 2π×0.033/60
+            'max_velocity': 0.25,        # physical limit (from vehicle_params.yaml)
             'wheel_radius': 0.033,       # 33 mm wheel
             'servo_center': 85,
             'servo_min': 40,

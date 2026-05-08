@@ -54,9 +54,9 @@ def generate_launch_description():
         description='Track to load (track_1, track_2, track_3)'
     )
 
-    # Path planner tuning
+    # Path planner tuning (simulation overrides)
     cruise_speed_arg = DeclareLaunchArgument(
-        'cruise_speed', default_value='1.5',
+        'cruise_speed', default_value='2.5',
         description='Cruise speed on straights [m/s]'
     )
     curve_speed_arg = DeclareLaunchArgument(
@@ -86,7 +86,7 @@ def generate_launch_description():
         description='Heading derivative damping'
     )
 
-    # PI speed gains
+    # PI speed gains (simulation-tuned)
     kp_arg = DeclareLaunchArgument(
         'kp', default_value='0.5',
         description='PI proportional gain'
@@ -106,6 +106,17 @@ def generate_launch_description():
     planner_config = os.path.join(hlc_pkg, 'config', 'path_planner_config.yaml')
 
     # ================================================================
+    # ---- Vehicle constants (from vehicle_params.yaml) --------------
+    # ================================================================
+    WHEELBASE = 0.22
+    WHEEL_RADIUS = 0.033
+    MAX_STEERING_ANGLE = 45.0
+    CONTROL_RATE = 20.0
+
+    # Simulation-specific overrides
+    MAX_VELOCITY_SIM = 2.0
+
+    # ================================================================
     # ---- 1. Gazebo + Vehicle Model ---------------------------------
     # ================================================================
     # Build world path from track argument
@@ -115,8 +126,6 @@ def generate_launch_description():
     ])
 
     # All tracks start at (0, 0) — unified origin for sim and hardware
-    initial_y = '0.0'
-
     vehicle_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(gazebo_pkg, 'launch', 'vehicle.launch.py')
@@ -124,7 +133,7 @@ def generate_launch_description():
         launch_arguments={
             'world': world_path,
             'x': '0.0',
-            'y': initial_y,
+            'y': '0.0',
             'z': '0.1',
             'Y': '0.0',
         }.items()
@@ -153,10 +162,10 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'pose_topic':   '/model/ackermann_steering_vehicle/pose',
-            'state_topic':  '/vehicle/state',  # Primary state topic
+            'state_topic':  '/vehicle/state',
             'publish_rate': 50.0,
-            'wheel_radius': 0.04,
-            'wheelbase':    0.22,
+            'wheel_radius': WHEEL_RADIUS,
+            'wheelbase':    WHEELBASE,
         }],
     )
 
@@ -173,8 +182,8 @@ def generate_launch_description():
             'steering_topic': '/steering_angle',
             'velocity_topic': '/velocity',
             'feedback_topic': '/vehicle/feedback',
-            'wheel_radius':   0.04,
-            'publish_rate':   20.0,
+            'wheel_radius':   WHEEL_RADIUS,
+            'publish_rate':   CONTROL_RATE,
         }],
     )
 
@@ -211,8 +220,8 @@ def generate_launch_description():
             'desired_speed': 0.0,  # Will be set by path planner
             'kp':            LaunchConfiguration('kp'),
             'ki':            LaunchConfiguration('ki'),
-            'max_velocity':  2.0,
-            'control_rate':  20.0,
+            'max_velocity':  MAX_VELOCITY_SIM,
+            'control_rate':  CONTROL_RATE,
             'state_topic':   '/vehicle/state',
             'output_topic':  '/teleop/speed_cmd',
         }],
@@ -234,8 +243,8 @@ def generate_launch_description():
             'k_stanley':          LaunchConfiguration('k_stanley'),
             'k_soft':             LaunchConfiguration('k_soft'),
             'k_d_heading':        LaunchConfiguration('k_d_heading'),
-            'max_steering_angle': 45.0,
-            'control_rate':       20.0,
+            'max_steering_angle': MAX_STEERING_ANGLE,
+            'control_rate':       CONTROL_RATE,
             'invert_steering_output': True,  # Simulation requires inversion
             'state_topic':        '/vehicle/state',
             'output_topic':       '/teleop/lateral_cmd',
@@ -254,7 +263,7 @@ def generate_launch_description():
             'speed_topic':   '/teleop/speed_cmd',
             'lateral_topic': '/teleop/lateral_cmd',
             'output_topic':  '/vehicle/cmd',
-            'publish_rate':  20.0,
+            'publish_rate':  CONTROL_RATE,
         }],
     )
 
