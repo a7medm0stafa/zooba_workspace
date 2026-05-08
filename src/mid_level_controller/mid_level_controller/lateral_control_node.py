@@ -49,7 +49,7 @@ class LateralControlNode(Node):
         self.declare_parameter('k_stanley', 5.0)               # cross-track gain
         self.declare_parameter('k_soft', 1.0)                  # softening constant
         self.declare_parameter('k_d_heading', 0.3)             # heading derivative damping
-        self.declare_parameter('max_steering_angle', 35.0)     # degrees
+        self.declare_parameter('max_steering_angle', 45.0)     # degrees
         self.declare_parameter('control_rate', 20.0)           # Hz
         self.declare_parameter('invert_steering_output', False) # Flips sign of steering output
         self.declare_parameter('state_topic', '/vehicle/state')

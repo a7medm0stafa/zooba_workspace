@@ -1,0 +1,98 @@
+# =====================================================================
+# Controller Parameters — Tuning & Gains
+# =====================================================================
+# FILE: mid_level_controller/config/controller_params.yaml
+#
+# All controller tuning parameters for the Zooba vehicle.
+# Organized by node with ros__parameters for direct loading.
+# Contains HARDWARE tuning by default. Simulation launch files
+# override specific values inline where needed.
+# =====================================================================
+
+# ==================================================================
+# Speed Controller (PI)
+# ==================================================================
+speed_control_node:
+  ros__parameters:
+    desired_speed: 0.15         # Default goal speed [m/s]
+    kp: 1.0                    # PI proportional gain (hardware)
+    ki: 0.1                    # PI integral gain (hardware)
+    max_velocity: 0.25          # Output saturation [m/s]
+    control_rate: 20.0          # Control loop rate [Hz]
+    state_topic: /vehicle/state
+    output_topic: /teleop/speed_cmd
+    bypass_pi: false            # true for hardware (Arduino PI), false for sim
+
+# ==================================================================
+# Lateral Controller (Extended Stanley)
+# ==================================================================
+lateral_control_node:
+  ros__parameters:
+    desired_x: 0.0              # Target X position [m]
+    desired_y: 0.0              # Target Y position (lane) [m]
+    desired_heading: 0.0        # Target heading [degrees] (0 = +X)
+    k_heading: 3.0              # Heading proportional gain
+    k_stanley: 5.0              # Cross-track gain
+    k_soft: 1.0                 # Softening constant (avoids div-by-zero)
+    k_d_heading: 0.1            # Heading derivative damping (hardware)
+    max_steering_angle: 45.0    # Steering output saturation [degrees]
+    control_rate: 20.0          # Control loop rate [Hz]
+    invert_steering_output: false  # false for hardware, true for simulation
+    state_topic: /vehicle/state
+    output_topic: /teleop/lateral_cmd
+
+# ==================================================================
+# Control Merger
+# ==================================================================
+control_merger_node:
+  ros__parameters:
+    speed_topic: /teleop/speed_cmd
+    lateral_topic: /teleop/lateral_cmd
+    output_topic: /teleop/raw_cmd
+    publish_rate: 20.0
+
+# ==================================================================
+# Path Planner (Cubic Spline Trajectory)
+# ==================================================================
+path_planner_node:
+  ros__parameters:
+    cruise_speed: 0.25          # [m/s] nominal straight-line speed (hardware)
+    curve_speed: 0.10           # [m/s] reduced speed in tight curves
+    lookahead_distance: 0.10    # [m] distance ahead on path for target point
+    waypoint_tolerance: 0.15    # [m] cross-track snap distance
+    trajectory_resolution: 0.02 # [m] dense trajectory point spacing
+    goal_tolerance: 0.15        # [m] distance to final point to declare "done"
+    max_lateral_accel: 0.3      # [m/s²] lateral acceleration limit for curves
+    control_rate: 20.0          # [Hz] planner update rate
+    start_delay: 10.0           # [s] wait before starting (let localization settle)
+    state_topic: /vehicle/state
+
+# ==================================================================
+# Traffic Light Controller (HLC)
+# ==================================================================
+traffic_light_controller_node:
+  ros__parameters:
+    cruise_velocity: 0.25       # [m/s] speed on GREEN light
+    slow_velocity: 0.15         # [m/s] speed on YELLOW/SLOW/TURN
+    heading: 0.0                # [degrees] default heading (straight)
+    turn_heading: 30.0          # [degrees] heading for TURN_LEFT/TURN_RIGHT
+    publish_rate: 20.0          # [Hz] command publish rate
+    state_topic: /traffic_light/state
+    sign_topic: /sign/command
+    output_topic: /teleop/auto_cmd
+    unknown_timeout: 2.0        # [s] no-data timeout → treat as UNKNOWN
+
+# ==================================================================
+# Odometry Node (Dead-Reckoning)
+# ==================================================================
+odometry_node:
+  ros__parameters:
+    wheelbase: 0.22             # [m]
+    wheel_radius: 0.033         # [m]
+    encoder_cpr: 5471           # Counts per revolution
+    use_imu_heading: true       # Use IMU yaw for heading estimation
+    source: "hardware"
+    feedback_topic: /vehicle/feedback
+    imu_topic: /vehicle/imu
+    state_topic: /vehicle/state
+    publish_rate: 20.0

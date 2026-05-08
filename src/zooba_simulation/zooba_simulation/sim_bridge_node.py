@@ -43,7 +43,7 @@ class SimBridgeNode(Node):
         self.declare_parameter('steering_topic', '/steering_angle')
         self.declare_parameter('velocity_topic', '/velocity')
         self.declare_parameter('feedback_topic', '/vehicle/feedback')
-        self.declare_parameter('wheel_radius', 0.04)
+        self.declare_parameter('wheel_radius', 0.033)
         self.declare_parameter('publish_rate', 20.0)
 
         input_topic = self.get_parameter('input_topic').value

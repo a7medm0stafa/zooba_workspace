@@ -22,7 +22,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
 
     pkg_share = get_package_share_directory('mid_level_controller')
-    default_config = os.path.join(pkg_share, 'config', 'vehicle_constraints.yaml')
+    default_config = os.path.join(pkg_share, 'config', 'vehicle_params.yaml')
 
     # ---- Launch arguments ----
     config_file_arg = DeclareLaunchArgument(
@@ -55,7 +55,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'output_topic': LaunchConfiguration('output_topic'),
-            'max_velocity': 0.249,  # physical max: 71.95 RPM × 2π×0.033/60
+            'max_velocity': 0.25,   # physical max from vehicle_params.yaml
             'max_heading': 45.0,
             'axis_steering': 0,
             'axis_forward': 5, # R2/RT

@@ -6,16 +6,8 @@ Launches the complete pipeline:
     2. sign_detection_node         (perception — subscribes to camera topic)
     3. traffic_light_detector_node (perception — subscribes to camera topic)
     4. traffic_light_controller_node (high-level — publishes to /teleop/auto_cmd)
-    5. command_arbiter_node        (high-level — merges joy + auto → /teleop/raw_cmd)
-    6. nonholonomic_constraints_node (mid-level — /teleop/raw_cmd → /vehicle/cmd)
-    7. low_level_controller_node   (low-level — /vehicle/cmd → hardware)
-
-Manual override:
-    Launch this file, then in another terminal run the joystick:
-        ros2 launch mid_level_controller joy_teleop.launch.py output_topic:=/teleop/joy_cmd
-
-    The arbiter will use joystick commands as base, but perception safety
-    overrides (STOP, SLOW) always apply.
+    5. nonholonomic_constraints_node (mid-level — /teleop/raw_cmd → /vehicle/cmd)
+    6. low_level_controller_node   (low-level — /vehicle/cmd → hardware)
 
 Usage:
     # Full stack:
@@ -41,7 +33,7 @@ def generate_launch_description():
     hlc_config = os.path.join(hlc_share, 'config', 'high_level_controller.yaml')
 
     mlc_share = get_package_share_directory('mid_level_controller')
-    mlc_config = os.path.join(mlc_share, 'config', 'vehicle_constraints.yaml')
+    mlc_config = os.path.join(mlc_share, 'config', 'vehicle_params.yaml')
 
     # ---- Launch arguments ----
     hlc_config_arg = DeclareLaunchArgument(
@@ -132,23 +124,7 @@ def generate_launch_description():
         parameters=[LaunchConfiguration('hlc_config')],
     )
 
-    # ---- 5. Command Arbiter (High-Level) ----
-    command_arbiter = Node(
-        package='high_level_controller',
-        executable='command_arbiter_node',
-        name='command_arbiter_node',
-        output='screen',
-        parameters=[{
-            'joy_topic': '/teleop/joy_cmd',
-            'auto_topic': '/teleop/auto_cmd',
-            'output_topic': '/teleop/raw_cmd',
-            'joy_timeout': 0.5,
-            'slow_velocity': 0.3,
-            'publish_rate': 20.0,
-        }],
-    )
-
-    # ---- 6. Non-Holonomic Constraints (Mid-Level) ----
+    # ---- 5. Non-Holonomic Constraints (Mid-Level) ----
     constraints_node = Node(
         package='mid_level_controller',
         executable='nonholonomic_constraints_node',
@@ -157,7 +133,7 @@ def generate_launch_description():
         parameters=[LaunchConfiguration('mlc_config')],
     )
 
-    # ---- 7. Low-Level Controller ----
+    # ---- 6. Low-Level Controller ----
     low_level_node = Node(
         package='low_level_controller',
         executable='low_level_controller_node',
@@ -165,7 +141,7 @@ def generate_launch_description():
         output='screen',
     )
 
-    # ---- 8. Dashboard HUD (optional, when GUI is enabled) ----
+    # ---- 7. Dashboard HUD (optional, when GUI is enabled) ----
     dashboard = Node(
         package='perception',
         executable='dashboard_node',
@@ -193,7 +169,6 @@ def generate_launch_description():
         traffic_light_detector,
         # High-level
         traffic_light_controller,
-        command_arbiter,
         # Mid-level
         constraints_node,
         # Low-level

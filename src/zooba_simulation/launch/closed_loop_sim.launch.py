@@ -2,8 +2,6 @@
 closed_loop_sim.launch.py — Full Closed-Loop Simulation
 =========================================================
 FILE: zooba_simulation/launch/closed_loop_sim.launch.py
-STATUS: MODIFIED — uses ground_truth_node for localization, added path planner
-MODIFIED: 2026-05-06
 
 LOCALIZATION:
     Simulation uses ground_truth_node (perfect Gazebo pose) for state estimation.
@@ -57,6 +55,17 @@ from launch_ros.actions import Node
 def generate_launch_description():
 
     # ================================================================
+    # ---- Vehicle constants (from vehicle_params.yaml) --------------
+    # ================================================================
+    WHEELBASE = 0.22
+    WHEEL_RADIUS = 0.033
+    MAX_STEERING_ANGLE = 45.0
+    CONTROL_RATE = 20.0
+
+    # Simulation-specific overrides
+    MAX_VELOCITY_SIM = 2.0
+
+    # ================================================================
     # ---- Launch arguments: initial vehicle pose --------------------
     # ================================================================
     world_arg = DeclareLaunchArgument(
@@ -103,10 +112,6 @@ def generate_launch_description():
         'ki', default_value='0.1',
         description='PI integral gain'
     )
-    max_velocity_arg = DeclareLaunchArgument(
-        'max_velocity', default_value='2.0',
-        description='Speed output saturation [m/s]'
-    )
 
     # ================================================================
     # ---- Launch arguments: lateral controller (Extended Stanley) ---
@@ -132,12 +137,8 @@ def generate_launch_description():
         description='Stanley softening constant (avoids div-by-zero)'
     )
     k_d_heading_arg = DeclareLaunchArgument(
-        'k_d_heading', default_value='0.2',
+        'k_d_heading', default_value='0.3',
         description='Heading derivative damping gain (prevents heading overshoot)'
-    )
-    max_steering_arg = DeclareLaunchArgument(
-        'max_steering_angle', default_value='45.0',
-        description='Steering output saturation [degrees]'
     )
 
     # ================================================================
@@ -201,9 +202,9 @@ def generate_launch_description():
         parameters=[{
             'pose_topic':   '/model/ackermann_steering_vehicle/pose',
             'state_topic':  '/vehicle/state',
-            'publish_rate': 20.0,
-            'wheel_radius': 0.04,
-            'wheelbase':    0.22,
+            'publish_rate': CONTROL_RATE,
+            'wheel_radius': WHEEL_RADIUS,
+            'wheelbase':    WHEELBASE,
         }],
     )
 
@@ -220,8 +221,8 @@ def generate_launch_description():
             'steering_topic': '/steering_angle',
             'velocity_topic': '/velocity',
             'feedback_topic': '/vehicle/feedback',
-            'wheel_radius':   0.04,
-            'publish_rate':   20.0,
+            'wheel_radius':   WHEEL_RADIUS,
+            'publish_rate':   CONTROL_RATE,
         }],
     )
 
@@ -237,8 +238,8 @@ def generate_launch_description():
             'desired_speed': LaunchConfiguration('desired_speed'),
             'kp':            LaunchConfiguration('kp'),
             'ki':            LaunchConfiguration('ki'),
-            'max_velocity':  LaunchConfiguration('max_velocity'),
-            'control_rate':  20.0,
+            'max_velocity':  MAX_VELOCITY_SIM,
+            'control_rate':  CONTROL_RATE,
             'state_topic':   '/vehicle/state',
             'output_topic':  '/teleop/speed_cmd',
             # bypass_pi defaults to False — simulation uses ROS PI
@@ -260,8 +261,8 @@ def generate_launch_description():
             'k_stanley':          LaunchConfiguration('k_stanley'),
             'k_soft':             LaunchConfiguration('k_soft'),
             'k_d_heading':        LaunchConfiguration('k_d_heading'),
-            'max_steering_angle': LaunchConfiguration('max_steering_angle'),
-            'control_rate':       20.0,
+            'max_steering_angle': MAX_STEERING_ANGLE,
+            'control_rate':       CONTROL_RATE,
             'invert_steering_output': True,
             'state_topic':        '/vehicle/state',
             'output_topic':       '/teleop/lateral_cmd',
@@ -280,7 +281,7 @@ def generate_launch_description():
             'speed_topic':   '/teleop/speed_cmd',
             'lateral_topic': '/teleop/lateral_cmd',
             'output_topic':  '/vehicle/cmd',
-            'publish_rate':  20.0,
+            'publish_rate':  CONTROL_RATE,
         }],
     )
 
@@ -308,9 +309,9 @@ def generate_launch_description():
         # --- declare all args first ---
         world_arg,
         x_arg, y_arg, z_arg, roll_arg, pitch_arg, yaw_arg,
-        desired_speed_arg, kp_arg, ki_arg, max_velocity_arg,
+        desired_speed_arg, kp_arg, ki_arg,
         desired_y_arg, desired_heading_arg,
-        k_heading_arg, k_stanley_arg, k_soft_arg, k_d_heading_arg, max_steering_arg,
+        k_heading_arg, k_stanley_arg, k_soft_arg, k_d_heading_arg,
         track_arg, use_planner_arg,
         # --- then launch everything ---
         vehicle_launch,

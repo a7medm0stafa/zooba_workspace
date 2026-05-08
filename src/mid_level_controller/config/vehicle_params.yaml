@@ -1,0 +1,59 @@
+# =====================================================================
+# Vehicle Parameters — Single Source of Truth
+# =====================================================================
+# FILE: mid_level_controller/config/vehicle_params.yaml
+#
+# All physical constants and limits for the Zooba vehicle.
+# Referenced by all launch files to ensure consistency.
+#
+# NOTE: This file uses the nonholonomic_constraints_node namespace
+#       so it can be loaded directly for that node (backwards compat).
+#       Launch files also read individual values from here inline.
+# =====================================================================
+
+nonholonomic_constraints_node:
+  ros__parameters:
+
+    # ==================================================================
+    # Vehicle Geometry
+    # ==================================================================
+    wheelbase: 0.22             # Distance between front and rear axles [m]
+    track_width: 0.20           # Distance between left and right wheels [m]
+    wheel_radius: 0.033         # Wheel radius [m] (33 mm — hardware and sim)
+
+    # ==================================================================
+    # Drivetrain
+    # ==================================================================
+    encoder_cpr: 5471           # Effective counts per output shaft revolution
+    gear_ratio: 124.333         # Total gear ratio (motor → output shaft)
+
+    # ==================================================================
+    # Velocity Limits
+    # ==================================================================
+    max_velocity: 0.25          # Maximum velocity [m/s] (hardware physical limit)
+    max_velocity_rate: 0.5      # Maximum acceleration [m/s²]
+
+    # ==================================================================
+    # Steering Limits
+    # ==================================================================
+    max_steering_angle: 45.0    # Maximum steering angle [degrees] (physical max)
+    max_steering_rate: 200.0    # Maximum steering angular velocity [degrees/s]
+
+    # ==================================================================
+    # Servo (Hardware Only)
+    # ==================================================================
+    servo_center: 85            # Servo center angle [degrees] (straight)
+    servo_min: 40               # Servo minimum angle [degrees] (full right)
+    servo_max: 130              # Servo maximum angle [degrees] (full left)
+
+    # ==================================================================
+    # Control Rates
+    # ==================================================================
+    publish_rate: 20.0          # Default control loop rate [Hz]
+
+    # ==================================================================
+    # Topics (standard pipeline)
+    # ==================================================================
+    input_topic: /teleop/raw_cmd
+    output_topic: /vehicle/cmd
+    constraints_topic: /vehicle/constraints

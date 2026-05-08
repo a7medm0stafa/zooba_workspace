@@ -22,7 +22,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
 
     pkg_share = get_package_share_directory('mid_level_controller')
-    default_config = os.path.join(pkg_share, 'config', 'vehicle_constraints.yaml')
+    default_config = os.path.join(pkg_share, 'config', 'vehicle_params.yaml')
 
     # ---- Launch arguments ----
     config_file_arg = DeclareLaunchArgument(

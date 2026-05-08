@@ -45,7 +45,7 @@ class OdometryNode(Node):
         self.declare_parameter('imu_topic', '/imu/data')
         self.declare_parameter('state_topic', '/vehicle/state')
         self.declare_parameter('publish_rate', 20.0)
-        self.declare_parameter('wheel_radius', 0.04)
+        self.declare_parameter('wheel_radius', 0.033)
         self.declare_parameter('ticks_per_rev', 1968)
         self.declare_parameter('initial_x', 0.0)
         self.declare_parameter('initial_y', 0.0)

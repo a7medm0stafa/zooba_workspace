@@ -33,7 +33,7 @@ class GroundTruthNode(Node):
         self.declare_parameter('pose_topic', '/model/ackermann_steering_vehicle/pose')
         self.declare_parameter('state_topic', '/vehicle/state')
         self.declare_parameter('publish_rate', 20.0)
-        self.declare_parameter('wheel_radius', 0.04)
+        self.declare_parameter('wheel_radius', 0.033)
         self.declare_parameter('wheelbase', 0.22)
 
         pose_topic = self.get_parameter('pose_topic').value

@@ -1,0 +1,20 @@
+# =====================================================================
+# High-Level Controller — Traffic Light Controller Config
+# =====================================================================
+# FILE: high_level_controller/config/high_level_controller.yaml
+#
+# NOTE: Authoritative values are in mid_level_controller/config/controller_params.yaml
+#       This file exists for standalone HLC launch compatibility.
+# =====================================================================
+
+traffic_light_controller_node:
+  ros__parameters:
+    cruise_velocity: 0.25       # [m/s] speed on GREEN light
+    slow_velocity: 0.15         # [m/s] speed on YELLOW/SLOW/TURN
+    heading: 0.0                # [degrees] default heading (straight)
+    turn_heading: 30.0          # [degrees] heading for TURN_LEFT/TURN_RIGHT
+    publish_rate: 20.0          # [Hz]
+    state_topic: "/traffic_light/state"
+    sign_topic: "/sign/command"
+    output_topic: "/teleop/auto_cmd"
+    unknown_timeout: 2.0        # [s]
