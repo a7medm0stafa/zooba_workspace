@@ -16,5 +16,5 @@ traffic_light_controller_node:
     publish_rate: 20.0          # [Hz]
     state_topic: "/traffic_light/state"
     sign_topic: "/sign/command"
-    output_topic: "/teleop/auto_cmd"
+    output_topic: "/teleop/raw_cmd"
     unknown_timeout: 2.0        # [s]
