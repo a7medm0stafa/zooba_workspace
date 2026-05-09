@@ -97,7 +97,7 @@ class TrafficLightControllerNode(Node):
         _d('publish_rate', 20.0)          
         _d('state_topic', '/traffic_light/state')
         _d('sign_topic', '/sign/command')
-        _d('output_topic', '/teleop/raw_cmd')
+        _d('output_topic', '/teleop/auto_cmd')
         _d('unknown_timeout', 2.0)        
 
     def _load_yaml_params(self) -> dict:
