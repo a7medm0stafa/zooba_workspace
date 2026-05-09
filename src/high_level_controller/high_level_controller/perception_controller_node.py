@@ -18,9 +18,9 @@ Velocity State Logic:
     GREEN                           → FAST state
     (Maintains current state if NO_SIGNAL or UNKNOWN)
 
-Turning State Logic (RHR convention: +ve = right, -ve = left):
-    TURN_RIGHT                      → target_yaw = current_yaw + π/2
-    TURN_LEFT                       → target_yaw = current_yaw - π/2
+Turning State Logic (RHR convention: CCW = positive):
+    TURN_LEFT                       → target_yaw = current_yaw + π/2
+    TURN_RIGHT                      → target_yaw = current_yaw - π/2
     (Locks turning state until abs(current_yaw - target_yaw) < tolerance)
 
 Sign Latch (One-Shot):
@@ -263,18 +263,18 @@ class PerceptionControllerNode(Node):
         else:
             self.no_signal_consecutive = 0
 
-        # 4. Turning State Machine (RHR: +ve = right, -ve = left)
+        # 4. Turning State Machine (RHR: +ve = left, -ve = right)
         if self.turning_state == 'STRAIGHT':
             # Only accept a new turn command if the latch is not active
             if eff_sign in ('TURN_LEFT', 'TURN_RIGHT') and not self.sign_latch_active:
-                if eff_sign == 'TURN_RIGHT':
-                    self.turning_state = 'TURNING_RIGHT'
-                    # +90 degrees = +π/2 (right in RHR convention)
+                if eff_sign == 'TURN_LEFT':
+                    self.turning_state = 'TURNING_LEFT'
+                    # +90 degrees = +π/2 (left in RHR convention)
                     self.target_yaw = self._normalize_angle(
                         self.current_yaw + math.pi / 2.0)
                 else:
-                    self.turning_state = 'TURNING_LEFT'
-                    # -90 degrees = -π/2 (left in RHR convention)
+                    self.turning_state = 'TURNING_RIGHT'
+                    # -90 degrees = -π/2 (right in RHR convention)
                     self.target_yaw = self._normalize_angle(
                         self.current_yaw - math.pi / 2.0)
 

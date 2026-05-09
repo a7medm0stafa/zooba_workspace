@@ -187,7 +187,7 @@ def generate_launch_description():
             'desired_heading': 0.0,
             'desired_y': 0.0,
             'k_heading': 1.5,
-            'k_stanley': 2.5,
+            'k_stanley': 0.0,    # 0.0 disables CTE so it acts as pure heading PD controller
             'k_soft': 1.0,
             'k_d_heading': 0.3,
             'max_steering_angle': 35.0,
