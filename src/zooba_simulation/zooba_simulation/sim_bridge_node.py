@@ -20,8 +20,8 @@ Publishes:
 
 Note: The Gazebo vehicle_controller uses the convention that positive
 steering_angle = left turn and positive velocity = forward.
-Our VehicleCmd uses positive heading = right, so we negate the heading
-when converting to the Gazebo convention.
+Our VehicleCmd also uses positive heading = left (Right Hand Rule),
+so we pass the heading directly without negation.
 """
 
 import math
@@ -91,8 +91,8 @@ class SimBridgeNode(Node):
 
     def _cmd_callback(self, msg: VehicleCmd):
         """Convert VehicleCmd to Gazebo-native Float64 topics."""
-        # Convert heading (degrees, +right) → steering_angle (radians, +left)
-        steering_rad = -math.radians(msg.heading)
+        # Convert heading (degrees, +left) → steering_angle (radians, +left)
+        steering_rad = math.radians(msg.heading)
 
         # Velocity passes through directly (both in m/s)
         velocity_mps = msg.velocity

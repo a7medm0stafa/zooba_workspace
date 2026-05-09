@@ -99,9 +99,9 @@ class TeleopJoyNode(Node):
 
         # Steering
         # Left on stick is +1.0, Right is -1.0
-        # In this package, negative heading is left, positive is right
+        # In this package, positive heading is left, negative is right
         if len(msg.axes) > self.axis_steering:
-            self.current_heading = -msg.axes[self.axis_steering] * self.max_heading
+            self.current_heading = msg.axes[self.axis_steering] * self.max_heading
 
         self.publish_cmd(self.current_velocity, self.current_heading)
 

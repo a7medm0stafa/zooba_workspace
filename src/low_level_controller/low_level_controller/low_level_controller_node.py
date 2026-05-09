@@ -223,12 +223,12 @@ class LowLevelControllerNode(Node):
                 imu_msg.header.frame_id = 'imu_link'
                 # Values are ×100 integers from Arduino
                 imu_msg.accel_x = int(parts[2]) / 100.0
-                imu_msg.accel_y = int(parts[3]) / 100.0
+                imu_msg.accel_y = -(int(parts[3]) / 100.0)
                 imu_msg.accel_z = int(parts[4]) / 100.0
                 imu_msg.gyro_x = int(parts[5]) / 100.0
-                imu_msg.gyro_y = int(parts[6]) / 100.0
-                imu_msg.gyro_z = int(parts[7]) / 100.0
-                imu_msg.yaw = int(parts[8]) / 10.0  # ×10 integer → degrees
+                imu_msg.gyro_y = -(int(parts[6]) / 100.0)
+                imu_msg.gyro_z = -(int(parts[7]) / 100.0)
+                imu_msg.yaw = -(int(parts[8]) / 10.0)  # ×10 integer → degrees
                 self.imu_pub.publish(imu_msg)
 
         except (ValueError, IndexError) as e:
@@ -240,7 +240,7 @@ class LowLevelControllerNode(Node):
         """
         Callback for /vehicle/cmd topic.
         msg.velocity: m/s (positive = forward, negative = reverse)
-        msg.heading:  degrees from center (positive = right, negative = left)
+        msg.heading:  degrees from center (positive = left, negative = right)
         """
         velocity = msg.velocity
         heading = msg.heading
@@ -252,9 +252,11 @@ class LowLevelControllerNode(Node):
         heading = max(-self.max_steering_angle, min(self.max_steering_angle, heading))
 
         if heading >= 0:
-            servo_angle = self.servo_center + (heading / self.max_steering_angle) * (self.servo_max - self.servo_center)
+            # Positive heading (LEFT) -> move servo towards servo_min (physically turns wheels left)
+            servo_angle = self.servo_center - (heading / self.max_steering_angle) * (self.servo_center - self.servo_min)
         else:
-            servo_angle = self.servo_center + (heading / self.max_steering_angle) * (self.servo_center - self.servo_min)
+            # Negative heading (RIGHT) -> move servo towards servo_max (physically turns wheels right)
+            servo_angle = self.servo_center - (heading / self.max_steering_angle) * (self.servo_max - self.servo_center)
 
         servo_angle = int(round(servo_angle))
         servo_angle = max(self.servo_min, min(self.servo_max, servo_angle))

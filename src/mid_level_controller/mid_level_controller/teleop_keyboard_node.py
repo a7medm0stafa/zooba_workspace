@@ -133,19 +133,19 @@ class TeleopKeyboardNode(Node):
             )
             changed = True
 
-        # Steer left (negative heading)
+        # Steer left (positive heading)
         elif key in ('a', 'A', '\x1b[D'):  # A or Left arrow
-            self.current_heading = max(
-                self.current_heading - self.heading_step,
-                -self.max_heading
-            )
-            changed = True
-
-        # Steer right (positive heading)
-        elif key in ('d', 'D', '\x1b[C'):  # D or Right arrow
             self.current_heading = min(
                 self.current_heading + self.heading_step,
                 self.max_heading
+            )
+            changed = True
+
+        # Steer right (negative heading)
+        elif key in ('d', 'D', '\x1b[C'):  # D or Right arrow
+            self.current_heading = max(
+                self.current_heading - self.heading_step,
+                -self.max_heading
             )
             changed = True
 
