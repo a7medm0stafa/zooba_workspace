@@ -35,6 +35,9 @@ from rclpy.node import Node
 from vehicle_interfaces.msg import VehicleState
 from std_msgs.msg import Float64
 
+# Desired heading topic name (set by HLC via topic)
+_DEFAULT_DESIRED_HEADING_TOPIC = '/hlc/desired_heading'
+
 
 class LateralControlNode(Node):
 
@@ -54,6 +57,7 @@ class LateralControlNode(Node):
         self.declare_parameter('invert_steering_output', False) # Flips sign of steering output
         self.declare_parameter('state_topic', '/vehicle/state')
         self.declare_parameter('output_topic', '/teleop/lateral_cmd')
+        self.declare_parameter('desired_heading_topic', _DEFAULT_DESIRED_HEADING_TOPIC)
 
         self.desired_x = self.get_parameter('desired_x').value
         self.desired_y = self.get_parameter('desired_y').value
@@ -68,6 +72,7 @@ class LateralControlNode(Node):
         control_rate = self.get_parameter('control_rate').value
         state_topic = self.get_parameter('state_topic').value
         output_topic = self.get_parameter('output_topic').value
+        desired_heading_topic = self.get_parameter('desired_heading_topic').value
 
         # ---- State ----
         self.current_x = 0.0
@@ -79,9 +84,11 @@ class LateralControlNode(Node):
         # ---- Timer State ----
         self.last_time = self.get_clock().now()
 
-        # ---- Subscriber ----
+        # ---- Subscribers ----
         self.state_sub = self.create_subscription(
             VehicleState, state_topic, self._state_callback, 10)
+        self.desired_heading_sub = self.create_subscription(
+            Float64, desired_heading_topic, self._desired_heading_callback, 10)
 
         # ---- Publisher ----
         self.cmd_pub = self.create_publisher(Float64, output_topic, 10)
@@ -106,6 +113,7 @@ class LateralControlNode(Node):
         self.get_logger().info(f'  Control rate    : {control_rate:.0f} Hz')
         self.get_logger().info(f'  State topic     : {state_topic}')
         self.get_logger().info(f'  Output topic    : {output_topic}')
+        self.get_logger().info(f'  Desired heading ← : {desired_heading_topic}')
         self.get_logger().info('=' * 55)
 
     def _param_callback(self, params):
@@ -137,6 +145,11 @@ class LateralControlNode(Node):
         self.current_yaw = msg.yaw
         self.current_velocity = msg.velocity
         self.current_yaw_rate = msg.yaw_rate
+
+    def _desired_heading_callback(self, msg: Float64):
+        """Receive desired heading setpoint from HLC (degrees)."""
+        self.desired_heading = msg.data
+        self.desired_heading_rad = math.radians(msg.data)
 
     def _control_callback(self):
         """Extended Stanley control loop — compute and publish steering command."""

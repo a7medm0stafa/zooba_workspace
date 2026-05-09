@@ -1,20 +1,24 @@
 # =====================================================================
-# High-Level Controller — Traffic Light Controller Config
+# High-Level Controller — Perception Controller Config
 # =====================================================================
 # FILE: high_level_controller/config/high_level_controller.yaml
 #
-# NOTE: Authoritative values are in mid_level_controller/config/controller_params.yaml
-#       This file exists for standalone HLC launch compatibility.
+# The HLC publishes desired_speed and desired_heading to Float64 topics.
+# The MLC nodes (speed_control_node, lateral_control_node) subscribe
+# and run closed-loop control.
 # =====================================================================
 
-traffic_light_controller_node:
+perception_controller_node:
   ros__parameters:
     cruise_velocity: 0.25       # [m/s] speed on GREEN light
-    slow_velocity: 0.15         # [m/s] speed on YELLOW/SLOW/TURN
+    slow_velocity: 0.15         # [m/s] speed on YELLOW/SLOW
     heading: 0.0                # [degrees] default heading (straight)
-    turn_heading: 30.0          # [degrees] heading for TURN_LEFT/TURN_RIGHT
     publish_rate: 20.0          # [Hz]
     state_topic: "/traffic_light/state"
     sign_topic: "/sign/command"
-    output_topic: "/teleop/raw_cmd"
-    unknown_timeout: 2.0        # [s]
+    vehicle_state_topic: "/vehicle/state"
+    desired_speed_topic: "/hlc/desired_speed"
+    desired_heading_topic: "/hlc/desired_heading"
+    unknown_timeout: 2.0        # [s] timeout before treating as UNKNOWN/NO_SIGNAL
+    turn_tolerance_deg: 5.0     # [degrees] how close yaw must be to target
+    sign_clear_frames: 10       # consecutive NO_SIGNAL frames to clear latch

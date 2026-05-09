@@ -25,6 +25,9 @@ from rclpy.node import Node
 from vehicle_interfaces.msg import VehicleState
 from std_msgs.msg import Float64
 
+# Desired speed topic name (set by HLC via topic)
+_DEFAULT_DESIRED_SPEED_TOPIC = '/hlc/desired_speed'
+
 
 class SpeedControlNode(Node):
 
@@ -40,6 +43,7 @@ class SpeedControlNode(Node):
         self.declare_parameter('state_topic', '/vehicle/state')
         self.declare_parameter('output_topic', '/teleop/speed_cmd')
         self.declare_parameter('bypass_pi', False)         # Bypass ROS PI logic (pass-through)
+        self.declare_parameter('desired_speed_topic', _DEFAULT_DESIRED_SPEED_TOPIC)
 
         self.desired_speed = self.get_parameter('desired_speed').value
         self.kp = self.get_parameter('kp').value
@@ -49,6 +53,7 @@ class SpeedControlNode(Node):
         state_topic = self.get_parameter('state_topic').value
         output_topic = self.get_parameter('output_topic').value
         self.bypass_pi = self.get_parameter('bypass_pi').value
+        desired_speed_topic = self.get_parameter('desired_speed_topic').value
 
         # ---- PI State ----
         self.integral = 0.0
@@ -58,9 +63,11 @@ class SpeedControlNode(Node):
         # Anti-windup: integral saturation
         self.integral_max = self.max_velocity / max(self.ki, 0.001)
 
-        # ---- Subscriber ----
+        # ---- Subscribers ----
         self.state_sub = self.create_subscription(
             VehicleState, state_topic, self._state_callback, 10)
+        self.desired_speed_sub = self.create_subscription(
+            Float64, desired_speed_topic, self._desired_speed_callback, 10)
 
         # ---- Publisher ----
         self.cmd_pub = self.create_publisher(Float64, output_topic, 10)
@@ -81,6 +88,7 @@ class SpeedControlNode(Node):
         self.get_logger().info(f'  State topic   : {state_topic}')
         self.get_logger().info(f'  Output topic  : {output_topic}')
         self.get_logger().info(f'  Bypass PI     : {self.bypass_pi}')
+        self.get_logger().info(f'  Desired speed ← : {desired_speed_topic}')
         self.get_logger().info('=' * 50)
 
     def _param_callback(self, params):
@@ -100,6 +108,10 @@ class SpeedControlNode(Node):
     def _state_callback(self, msg: VehicleState):
         """Receive current vehicle velocity."""
         self.current_velocity = msg.velocity
+
+    def _desired_speed_callback(self, msg: Float64):
+        """Receive desired speed setpoint from HLC."""
+        self.desired_speed = msg.data
 
     def _control_callback(self):
         """PI control loop — compute and publish velocity command."""
