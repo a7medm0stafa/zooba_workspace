@@ -136,9 +136,9 @@ const unsigned long RPM_INTERVAL_MS = 100; // RPM calculation interval
 const unsigned long IMU_INTERVAL_MS = 10;  // IMU read at 100Hz
 
 // ==================== Servo Constants ====================
-const int SERVO_CENTER = 80;
-const int SERVO_MIN = 35;
-const int SERVO_MAX = 125;
+const int SERVO_CENTER = 82;
+const int SERVO_MIN = 37;
+const int SERVO_MAX = 127;
 
 // ==================== Serial Buffer ====================
 const int SERIAL_BUFFER_SIZE = 64;
