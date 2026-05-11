@@ -188,8 +188,8 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
             (1.5, 0.0),         # in left lane
             (2.5, 0.0),
             (5.0, 0.0),
-            # (7.5, 0.0),
-            # (10.0, 0.0),
+            (7.5, 0.0),
+            (10.0, 0.0),
         ], False  # not closed
 
     elif track_name == 'track_2':
