@@ -33,9 +33,9 @@ class LowLevelControllerNode(Node):
         self.declare_parameter('baud_rate', 115200)
         self.declare_parameter('max_velocity', 0.25)       # m/s
         self.declare_parameter('wheel_radius', 0.033)      # meters (for feedback conversion)
-        self.declare_parameter('servo_center', 82)          # degrees (straight)
-        self.declare_parameter('servo_min', 37)             # degrees (full right)
-        self.declare_parameter('servo_max', 127)            # degrees (full left)
+        self.declare_parameter('servo_center', 80)          # degrees (straight)
+        self.declare_parameter('servo_min', 35)             # degrees (full right)
+        self.declare_parameter('servo_max', 125)            # degrees (full left)
         self.declare_parameter('max_steering_angle', 45.0)  # degrees (+/- from center)
         self.declare_parameter('cmd_topic', '/vehicle/cmd')
         self.declare_parameter('feedback_topic', '/vehicle/feedback')
