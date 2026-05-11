@@ -41,9 +41,9 @@ nonholonomic_constraints_node:
     # ==================================================================
     # Servo (Hardware Only)
     # ==================================================================
-    servo_center: 80 # Servo center angle [degrees] (straight)
-    servo_min: 35 # Servo minimum angle [degrees] (full right)
-    servo_max: 125 # Servo maximum angle [degrees] (full left)
+    servo_center: 78 # Servo center angle [degrees] (straight)
+    servo_min: 33 # Servo minimum angle [degrees] (full right)
+    servo_max: 123 # Servo maximum angle [degrees] (full left)
 
     # ==================================================================
     # Control Rates

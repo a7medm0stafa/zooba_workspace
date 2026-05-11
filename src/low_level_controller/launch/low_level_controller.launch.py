@@ -34,15 +34,15 @@ def generate_launch_description():
         description='Wheel radius in meters (33 mm wheel)'
     )
     servo_center_arg = DeclareLaunchArgument(
-        'servo_center', default_value='82',
+        'servo_center', default_value='78',
         description='Servo center angle (straight)'
     )
     servo_min_arg = DeclareLaunchArgument(
-        'servo_min', default_value='37',
+        'servo_min', default_value='33',
         description='Servo minimum angle'
     )
     servo_max_arg = DeclareLaunchArgument(
-        'servo_max', default_value='127',
+        'servo_max', default_value='123',
         description='Servo maximum angle'
     )
     max_steering_arg = DeclareLaunchArgument(
