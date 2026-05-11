@@ -35,10 +35,11 @@ USAGE:
 """
 
 import os
+import math
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
@@ -125,19 +126,24 @@ def generate_launch_description():
         [LaunchConfiguration('track'), '.world']
     ])
 
-    # All tracks start at (0, 0) — unified origin for sim and hardware
-    vehicle_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(gazebo_pkg, 'launch', 'vehicle.launch.py')
-        ),
-        launch_arguments={
-            'world': world_path,
-            'x': '0.0',
-            'y': '0.0',
-            'z': '0.1',
-            'Y': '0.0',
-        }.items()
-    )
+    # Track 3 CCW trajectory starts heading West → spawn at yaw=π
+    def _launch_vehicle(context):
+        track = LaunchConfiguration('track').perform(context)
+        spawn_yaw = str(math.pi) if track == 'track_3' else '0.0'
+        return [IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(gazebo_pkg, 'launch', 'vehicle.launch.py')
+            ),
+            launch_arguments={
+                'world': world_path,
+                'x': '0.0',
+                'y': '0.0',
+                'z': '0.1',
+                'Y': spawn_yaw,
+            }.items()
+        )]
+
+    vehicle_launch = OpaqueFunction(function=_launch_vehicle)
 
     # ================================================================
     # ---- 2. Gazebo Pose Bridge (for ground truth) ------------------
