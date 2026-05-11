@@ -34,7 +34,7 @@ lateral_control_node:
     k_heading: 3.0              # Heading proportional gain
     k_stanley: 5.0              # Cross-track gain
     k_soft: 1.0                 # Softening constant (avoids div-by-zero)
-    k_d_heading: 0.1            # Heading derivative damping (hardware)
+    k_d_heading: 0.3            # Heading derivative damping (hardware)
     max_steering_angle: 45.0    # Steering output saturation [degrees]
     control_rate: 20.0          # Control loop rate [Hz]
     invert_steering_output: false  # false for hardware, true for simulation
