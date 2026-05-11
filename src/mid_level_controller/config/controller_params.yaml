@@ -31,8 +31,8 @@ lateral_control_node:
     desired_x: 0.0              # Target X position [m]
     desired_y: 0.0              # Target Y position (lane) [m]
     desired_heading: 0.0        # Target heading [degrees] (0 = +X)
-    k_heading: 2.0              # Heading proportional gain
-    k_stanley: 3.0              # Cross-track gain
+    k_heading: 3.0              # Heading proportional gain
+    k_stanley: 5.0              # Cross-track gain
     k_soft: 1.0                 # Softening constant (avoids div-by-zero)
     k_d_heading: 0.3            # Heading derivative damping (hardware)
     max_steering_angle: 45.0    # Steering output saturation [degrees]
