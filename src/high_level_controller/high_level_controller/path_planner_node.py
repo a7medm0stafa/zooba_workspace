@@ -226,66 +226,63 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
         ], False  # not closed
 
     elif track_name == 'track_3':
-        # Closed rectangular track, clockwise direction
-        # Vehicle starts at (0, 0) heading East (θ=0)
-        # Map shifted so start is at origin (all Y -= 1.75 from original)
+        # Closed rectangular track, COUNTER-CLOCKWISE direction (LEFT turns)
+        # Vehicle starts at (0, 0) heading East (θ=0) on the BOTTOM straight
+        # No initial_yaw needed — car faces East, IMU starts at 0°
+        # Map shifted so BOTTOM straight is at Y=0 (all Y += 1.75 from original)
         # Lane center coordinates:
-        #   Top straight:    Y = 0.0   (between inner -0.25 and outer 0.25)
-        #   Bottom straight: Y = -3.5
+        #   Bottom straight: Y = 0.0   (start, between outer -0.25 and inner 0.25)
+        #   Top straight:    Y = 3.5
         #   Right straight:  X = 2.25  (between inner 2.0 and outer 2.5)
         #   Left straight:   X = -2.25
-        # Straight extents (from world file box lengths):
-        #   Top/Bottom: X from -1.5 to 1.5  (3m box centered at X=0)
-        #   Left/Right: Y from -2.75 to -0.75  (2m box centered at Y=-1.75)
-        # Corner arc centers at (±1.5, ±0.75) and (±1.5, ±2.75), lane radius = 0.75m
+        # Corner arc centers at (±1.5, 0.75) and (±1.5, 2.75), lane radius = 0.75m
 
         wps = []
 
-        # Start: middle of top straight, heading East (+X)
-        # Go along top straight towards +X
+        # Start: middle of bottom straight, heading East (+X)
         wps.append((0.0, 0.0))          # START at origin
-        wps.append((1.0, 0.0))          # mid top straight
-        wps.append((1.5, 0.0))          # end of top straight
+        wps.append((1.0, 0.0))          # mid bottom straight
+        wps.append((1.5, 0.0))          # end of bottom straight
 
-        # Top-right corner: center (1.5, -0.75), R=0.75
-        # Arc from 90° to 0° (clockwise = decreasing angle)
-        wps += _arc_waypoints(1.5, -0.75, 0.75,
-                              math.radians(90), math.radians(0), n_pts=8)
+        # Bottom-right corner: center (1.5, 0.75), R=0.75
+        # Arc from -90° to 0° (CCW = increasing angle, turning LEFT / north)
+        wps += _arc_waypoints(1.5, 0.75, 0.75,
+                              math.radians(-90), math.radians(0), n_pts=8)
 
-        # Right straight: X=2.25, going south from Y=-0.75 to Y=-2.75
-        wps.append((2.25, -1.25))
-        wps.append((2.25, -1.75))
-        wps.append((2.25, -2.25))
-        wps.append((2.25, -2.75))
+        # Right straight: X=2.25, going north from Y=0.75 to Y=2.75
+        wps.append((2.25, 1.25))
+        wps.append((2.25, 1.75))
+        wps.append((2.25, 2.25))
+        wps.append((2.25, 2.75))
 
-        # Bottom-right corner: center (1.5, -2.75), R=0.75
-        # Arc from 0° to -90° (clockwise)
-        wps += _arc_waypoints(1.5, -2.75, 0.75,
-                              math.radians(0), math.radians(-90), n_pts=8)
+        # Top-right corner: center (1.5, 2.75), R=0.75
+        # Arc from 0° to 90° (CCW, turning LEFT / west)
+        wps += _arc_waypoints(1.5, 2.75, 0.75,
+                              math.radians(0), math.radians(90), n_pts=8)
 
-        # Bottom straight: Y=-3.5, going west from X=1.5 to X=-1.5
-        wps.append((1.0, -3.5))
-        wps.append((0.0, -3.5))
-        wps.append((-1.0, -3.5))
-        wps.append((-1.5, -3.5))
+        # Top straight: Y=3.5, going west from X=1.5 to X=-1.5
+        wps.append((1.0, 3.5))
+        wps.append((0.0, 3.5))
+        wps.append((-1.0, 3.5))
+        wps.append((-1.5, 3.5))
 
-        # Bottom-left corner: center (-1.5, -2.75), R=0.75
-        # Arc from -90° to -180° (clockwise)
-        wps += _arc_waypoints(-1.5, -2.75, 0.75,
-                              math.radians(-90), math.radians(-180), n_pts=8)
+        # Top-left corner: center (-1.5, 2.75), R=0.75
+        # Arc from 90° to 180° (CCW, turning LEFT / south)
+        wps += _arc_waypoints(-1.5, 2.75, 0.75,
+                              math.radians(90), math.radians(180), n_pts=8)
 
-        # Left straight: X=-2.25, going north from Y=-2.75 to Y=-0.75
-        wps.append((-2.25, -2.25))
-        wps.append((-2.25, -1.75))
-        wps.append((-2.25, -1.25))
-        wps.append((-2.25, -0.75))
+        # Left straight: X=-2.25, going south from Y=2.75 to Y=0.75
+        wps.append((-2.25, 2.25))
+        wps.append((-2.25, 1.75))
+        wps.append((-2.25, 1.25))
+        wps.append((-2.25, 0.75))
 
-        # Top-left corner: center (-1.5, -0.75), R=0.75
-        # Arc from 180° to 90° (clockwise)
-        wps += _arc_waypoints(-1.5, -0.75, 0.75,
-                              math.radians(180), math.radians(90), n_pts=8)
+        # Bottom-left corner: center (-1.5, 0.75), R=0.75
+        # Arc from 180° to 270° (CCW, turning LEFT / east)
+        wps += _arc_waypoints(-1.5, 0.75, 0.75,
+                              math.radians(180), math.radians(270), n_pts=8)
 
-        # Back to top straight, heading East
+        # Back to bottom straight, heading East
         wps.append((-1.0, 0.0))
         wps.append((0.0, 0.0))          # BACK TO START (close the loop)
 
