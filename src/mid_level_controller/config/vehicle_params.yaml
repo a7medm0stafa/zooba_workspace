@@ -16,8 +16,8 @@ nonholonomic_constraints_node:
     # ==================================================================
     # Vehicle Geometry
     # ==================================================================
-    wheelbase: 0.22 # Distance between front and rear axles [m]
-    track_width: 0.20 # Distance between left and right wheels [m]
+    wheelbase: 0.265 # Distance between front and rear axles [m]
+    track_width: 0.165 # Distance between left and right wheels [m]
     wheel_radius: 0.033 # Wheel radius [m] (33 mm — hardware and sim)
 
     # ==================================================================
