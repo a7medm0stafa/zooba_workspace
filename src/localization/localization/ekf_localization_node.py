@@ -325,7 +325,9 @@ class EKFLocalizationNode(Node):
         self.latest_imu_yaw_rad = self._normalize_angle(corrected_yaw_rad)
 
         # ---- Heading measurement update (low trust, soft anchor) ----
-        self.ekf.update_heading(self.latest_imu_yaw_rad)
+        # DISABLE: MPU6050 DMP suffers from linear acceleration cross-coupling.
+        # Since we are on a 2D plane, pure integration of gyro_z is much more accurate.
+        # self.ekf.update_heading(self.latest_imu_yaw_rad)
 
     def _cmd_callback(self, msg: VehicleCmd):
         """Capture the commanded steering angle from /vehicle/cmd.
