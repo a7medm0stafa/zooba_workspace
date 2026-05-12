@@ -175,6 +175,8 @@ class EKFLocalizationNode(Node):
         # IMU
         self.imu_initialized = False
         self.imu_yaw_offset = 0.0
+        self.imu_gyro_sum = 0.0
+        self.imu_gyro_count = 0
         self.latest_gyro_z = 0.0         # rad/s
         self.latest_imu_yaw_rad = None   # rad (after offset correction)
         self.start_time = None
@@ -297,13 +299,18 @@ class EKFLocalizationNode(Node):
                 # Still settling — track raw yaw for offset
                 self.imu_yaw_offset = msg.yaw
                 self.latest_gyro_z = msg.gyro_z
+                self.imu_gyro_sum += msg.gyro_z
+                self.imu_gyro_count += 1
                 return
 
             # Capture zero-offset after settling
             self.imu_yaw_offset = msg.yaw
+            initial_bias = self.imu_gyro_sum / max(1, self.imu_gyro_count)
+            self.ekf.x[self.ekf.IBIAS] = initial_bias
             self.imu_initialized = True
             self.get_logger().info(
-                f'IMU initialized: yaw_offset={self.imu_yaw_offset:.2f}° '
+                f'IMU initialized: yaw_offset={self.imu_yaw_offset:.2f}°, '
+                f'gyro_bias={math.degrees(initial_bias):.3f}°/s '
                 f'(after {self.imu_settle_time:.1f}s settling)')
 
         # ---- Store latest gyro reading (used in prediction) ----
