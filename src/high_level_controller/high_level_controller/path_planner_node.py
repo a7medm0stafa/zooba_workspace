@@ -199,20 +199,32 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
         #
         # Strategy: start at origin, merge into left lane, switch right
         #           before Obs1, switch left before Obs2, finish
+        # NOTE: Double-anchor waypoints before/after each lane change
+        #       pin the spline flat and prevent early curvature.
+        #       Lane changes use 0.4m X-distance for aggressive S-curves.
         return [
             (0.0,  0.0),           # START at origin
             (0.5,  0.09),          # merge into left lane
             (1.0,  0.1875),        # in left lane
             (1.5,  0.1875),        # anchor
-            (2.2,  0.1875),        # hold straight longer
-            (2.7,  0.0),           # rapid lane change to right
-            (3.2, -0.1875),        # in right lane quickly
+            (2.0,  0.1875),        # anchor — hold flat longer
+            (2.5,  0.1875),        # double-anchor before transition
+            # --- Lane change RIGHT (avoid obstacle 1 at X=4) ---
+            (2.8,  0.1875),        # firm anchor right before change
+            (3.0,  0.0),           # sharp midpoint
+            (3.2, -0.1875),        # in right lane (0.4m transition)
+            (3.4, -0.1875),        # anchor right lane immediately
             (4.0, -0.1875),        # passing obstacle 1 (at X=4)
             (4.5, -0.1875),        # anchor right lane
             (5.0, -0.1875),        # cruising right lane
-            (6.2, -0.1875),        # hold straight longer
-            (6.7,  0.0),           # rapid lane change to left
-            (7.2,  0.1875),        # in left lane quickly
+            (5.5, -0.1875),        # hold right lane
+            (6.0, -0.1875),        # anchor — hold flat longer
+            (6.5, -0.1875),        # double-anchor before transition
+            # --- Lane change LEFT (avoid obstacle 2 at X=8) ---
+            (6.8, -0.1875),        # firm anchor right before change
+            (7.0,  0.0),           # sharp midpoint
+            (7.2,  0.1875),        # in left lane (0.4m transition)
+            (7.4,  0.1875),        # anchor left lane immediately
             (8.0,  0.1875),        # passing obstacle 2 (at X=8)
             (8.5,  0.1875),        # anchor left lane
             (9.0,  0.1875),        # past obstacle 2
@@ -528,7 +540,7 @@ class PathPlannerNode(Node):
             dx = self.traj_x[i+1] - self.traj_x[i]
             dy = self.traj_y[i+1] - self.traj_y[i]
             accum_dist += math.sqrt(dx*dx + dy*dy)
-            if accum_dist >= 0.10: # 10cm lateral lookahead
+            if accum_dist >= 0.05: # 5cm lateral lookahead (tighter for lane changes)
                 lateral_lookahead_idx = i + 1
                 break
 
