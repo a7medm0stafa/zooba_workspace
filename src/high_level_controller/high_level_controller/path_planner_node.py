@@ -202,22 +202,20 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
         return [
             (0.0,  0.0),           # START at origin
             (0.5,  0.0),           # settle straight
-            (1.0,  0.1),           # begin merge into left lane
+            (1.0,  0.09),          # begin merge into left lane
             (1.5,  0.1875),        # in left lane
             (2.0,  0.1875),        # anchor straight
-            (2.5,  0.1875),        # approach zone before obstacle 1
-            (2.8,  0.1875),        # hold lane until last moment
-            (3.2,  0.0),           # begin lane change to right
-            (3.6, -0.1875),        # in right lane before obstacle 1
+            (2.5,  0.1875),        # begin lane change to right
+            (3.0,  0.0),           # mid lane change
+            (3.5, -0.1875),        # in right lane before obstacle 1
             (4.0, -0.1875),        # passing obstacle 1
             (4.5, -0.1875),        # anchor right lane
             (5.0, -0.1875),        # cruising right lane
             (5.5, -0.1875),        # anchor right lane
             (6.0, -0.1875),        # anchor right lane
-            (6.5, -0.1875),        # approach zone before obstacle 2
-            (6.8, -0.1875),        # hold lane until last moment
-            (7.2,  0.0),           # begin lane change to left
-            (7.6,  0.1875),        # in left lane before obstacle 2
+            (6.5, -0.1875),        # begin lane change to left
+            (7.0,  0.0),           # mid lane change
+            (7.5,  0.1875),        # in left lane before obstacle 2
             (8.0,  0.1875),        # passing obstacle 2
             (8.5,  0.1875),        # anchor left lane
             (9.0,  0.1875),        # past obstacle 2
