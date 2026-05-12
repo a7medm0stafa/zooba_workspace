@@ -201,25 +201,21 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
         #           before Obs1, switch left before Obs2, finish
         return [
             (0.0,  0.0),           # START at origin
-            (0.5,  0.0),           # settle straight
-            (1.0,  0.09),          # begin merge into left lane
-            (1.5,  0.1875),        # in left lane
-            (2.0,  0.1875),        # anchor straight
-            (2.5,  0.1875),        # begin lane change to right
-            (3.0,  0.0),           # mid lane change
+            (0.5,  0.09),          # merge into left lane
+            (1.0,  0.1875),        # in left lane
+            (1.5,  0.1875),        # anchor
+            (2.0,  0.1875),        # begin lane change to right
+            (2.75, 0.0),           # mid lane change
             (3.5, -0.1875),        # in right lane before obstacle 1
             (4.0, -0.1875),        # passing obstacle 1
             (4.5, -0.1875),        # anchor right lane
             (5.0, -0.1875),        # cruising right lane
-            (5.5, -0.1875),        # anchor right lane
-            (6.0, -0.1875),        # anchor right lane
-            (6.5, -0.1875),        # begin lane change to left
-            (7.0,  0.0),           # mid lane change
+            (5.5, -0.1875),        # begin lane change to left
+            (6.5,  0.0),           # mid lane change
             (7.5,  0.1875),        # in left lane before obstacle 2
             (8.0,  0.1875),        # passing obstacle 2
             (8.5,  0.1875),        # anchor left lane
             (9.0,  0.1875),        # past obstacle 2
-            (9.5,  0.1875),        # anchor straight
             (10.0, 0.1875),        # finish
         ], False  # not closed
 
