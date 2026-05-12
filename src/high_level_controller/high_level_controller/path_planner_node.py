@@ -315,7 +315,7 @@ class PathPlannerNode(Node):
         self.declare_parameter('max_lateral_accel', 0.3)      # m/s² (for curvature speed limit)
         self.declare_parameter('control_rate', 20.0)          # Hz
         self.declare_parameter('state_topic', '/vehicle/state')
-        self.declare_parameter('start_delay', 2.0)            # seconds before first command
+        self.declare_parameter('start_delay', 5.0)            # seconds before first command
 
         self.track_name = self.get_parameter('track_name').value
         self.cruise_speed = self.get_parameter('cruise_speed').value
