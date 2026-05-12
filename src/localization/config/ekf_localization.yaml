@@ -53,7 +53,7 @@ ekf_localization_node:
 
     # Measurement noise (R — higher = less trust in this sensor)
     encoder_velocity_noise: 0.03   # Encoder velocity σ [m/s]
-    gyro_rate_noise: 0.02          # Gyroscope angular rate σ [rad/s] (Tuned down to trust bias est)
+    gyro_rate_noise: 0.1          # Gyroscope angular rate σ [rad/s] (Tuned down to trust bias est)
     imu_yaw_noise: 0.15           # IMU comp.filter heading σ [rad] (Trust it more now)
 
     # Zero-Velocity Update (ZUPT) — prevents drift when stopped
