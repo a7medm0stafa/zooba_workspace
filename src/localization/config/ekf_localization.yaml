@@ -54,14 +54,14 @@ ekf_localization_node:
     # Measurement noise (R — higher = less trust in this sensor)
     encoder_velocity_noise: 0.03   # Encoder velocity σ [m/s]
     gyro_rate_noise: 0.1          # Gyroscope angular rate σ [rad/s] (Tuned down to trust bias est)
-    imu_yaw_noise: 0.15           # IMU comp.filter heading σ [rad] (Trust it more now)
+    imu_yaw_noise: 0.1           # IMU comp.filter heading σ [rad] (Trust it more now)
 
     # Zero-Velocity Update (ZUPT) — prevents drift when stopped
     zupt_velocity_threshold: 0.02  # Speed below which ZUPT activates [m/s]
     zupt_noise: 0.001              # ZUPT virtual measurement noise
 
     # IMU initialization
-    imu_settle_time: 2.5         # Wait this long before trusting IMU [s]
+    imu_settle_time: 5.0        # Wait this long before trusting IMU [s]
 
     # Initial pose (can be overridden per-launch)
     initial_x: 0.0              # Starting X position [m]
