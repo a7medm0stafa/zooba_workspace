@@ -31,10 +31,10 @@ lateral_control_node:
     desired_x: 0.0              # Target X position [m]
     desired_y: 0.0              # Target Y position (lane) [m]
     desired_heading: 0.0        # Target heading [degrees] (0 = +X)
-    k_heading: 2.0              # Heading proportional gain (↓ better heading/CTE balance)
-    k_stanley: 7.0              # Cross-track gain (↑ more aggressive CTE correction)
+    k_heading: 3.0              # Heading proportional gain (↓ better heading/CTE balance)
+    k_stanley: 5.0              # Cross-track gain (↑ more aggressive CTE correction)
     k_soft: 1.0                 # Softening constant (avoids div-by-zero)
-    k_d_heading: 0.2            # Heading derivative damping (↓ faster response)
+    k_d_heading: 0.1            # Heading derivative damping (↓ faster response)
     max_steering_angle: 45.0    # Steering output saturation [degrees]
     steering_offset: 0.0       # Constant steering bias [degrees] (positive = left)
                                 # Compensates for servo/mechanical misalignment causing
