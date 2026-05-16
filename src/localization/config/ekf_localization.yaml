@@ -49,7 +49,7 @@ ekf_localization_node:
     process_noise_y: 0.1 # Position Y prediction noise
     process_noise_yaw: 0.1 # Heading prediction noise (↑5× to detect yaw drift)
     process_noise_vel: 0.1 # Velocity prediction noise
-    process_noise_gyro_bias: 0.00001 # Gyro bias random walk (↑10× to adapt during driving)
+    process_noise_gyro_bias: 0.01 # Gyro bias random walk (↑10× to adapt during driving)
 
     # Measurement noise (R — higher = less trust in this sensor)
     encoder_velocity_noise: 0.01 # Encoder velocity σ [m/s]
