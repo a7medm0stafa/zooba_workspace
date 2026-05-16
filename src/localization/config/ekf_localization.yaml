@@ -61,7 +61,7 @@ ekf_localization_node:
     zupt_noise: 0.001              # ZUPT virtual measurement noise
 
     # IMU initialization
-    imu_settle_time: 5.0        # Wait this long before trusting IMU [s]
+    imu_settle_time: 10.0        # Wait this long before trusting IMU [s]
 
     # Initial pose (can be overridden per-launch)
     initial_x: 0.0              # Starting X position [m]

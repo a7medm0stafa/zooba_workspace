@@ -108,7 +108,7 @@ class EKFLocalizationNode(Node):
         self.declare_parameter('zupt_noise', 0.001)
 
         # IMU settling
-        self.declare_parameter('imu_settle_time', 2.5)         # seconds
+        self.declare_parameter('imu_settle_time', 10.0)         # seconds
 
         # Initial pose
         self.declare_parameter('initial_x', 0.0)
