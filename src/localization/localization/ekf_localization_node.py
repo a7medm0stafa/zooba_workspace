@@ -449,10 +449,13 @@ class EKFLocalizationNode(Node):
         if abs(self.last_encoder_velocity) < self.zupt_velocity_threshold:
             if self.source == 'hardware':
                 self.ekf.zupt()
-                self.ekf.update_gyro(self.latest_gyro_z)
             elif abs(self.sim_velocity) < self.zupt_velocity_threshold:
                 self.ekf.zupt()
-                self.ekf.update_gyro(self.latest_gyro_z)
+
+        # ---- Gyro bias estimation (always, not just ZUPT) ----
+        # Moved outside ZUPT block so bias tracks continuously while driving.
+        # Without this, bias freezes once the car starts moving → yaw drift.
+        self.ekf.update_gyro(self.latest_gyro_z)
 
         # ---- Publish VehicleState ----
         state = VehicleState()

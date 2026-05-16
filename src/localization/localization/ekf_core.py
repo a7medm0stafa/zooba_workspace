@@ -201,8 +201,7 @@ class BicycleEKF:
         z = np.array([omega_measured])
         z_pred = np.array([self.x[self.IBIAS]])
 
-        # Use a scaled version: don't over-constrain
-        self._ekf_update(z, z_pred, H, self.R_gyro * 10.0)
+        self._ekf_update(z, z_pred, H, self.R_gyro)
 
     def update_heading(self, theta_measured: float):
         """Absolute heading measurement from IMU complementary filter.
