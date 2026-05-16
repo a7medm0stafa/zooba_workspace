@@ -307,12 +307,12 @@ class PathPlannerNode(Node):
         # ---- Parameters ----
         self.declare_parameter('track_name', 'track_1')
         self.declare_parameter('cruise_speed', 0.15)         # m/s
-        self.declare_parameter('curve_speed', 0.10)           # m/s  (speed in tight curves)
+        self.declare_parameter('curve_speed', 0.05)           # m/s  (speed in tight curves)
         self.declare_parameter('lookahead_distance', 0.20)    # m
         self.declare_parameter('waypoint_tolerance', 0.15)    # m
         self.declare_parameter('trajectory_resolution', 0.02) # m
-        self.declare_parameter('goal_tolerance', 0.25)        # m  (final waypoint)
-        self.declare_parameter('max_lateral_accel', 0.3)      # m/s² (for curvature speed limit)
+        self.declare_parameter('goal_tolerance', 0.10)        # m  (final waypoint)
+        self.declare_parameter('max_lateral_accel', 0.2)      # m/s² (for curvature speed limit)
         self.declare_parameter('control_rate', 20.0)          # Hz
         self.declare_parameter('state_topic', '/vehicle/state')
         self.declare_parameter('start_delay', 5.0)            # seconds before first command
