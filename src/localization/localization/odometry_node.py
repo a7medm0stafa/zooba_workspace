@@ -46,7 +46,7 @@ class OdometryNode(Node):
         self.declare_parameter('state_topic', '/vehicle/state')
         self.declare_parameter('publish_rate', 20.0)
         self.declare_parameter('wheel_radius', 0.033)
-        self.declare_parameter('ticks_per_rev', 1968)
+        self.declare_parameter('encoder_cpr', 5471)    # Counts per output-shaft revolution
         self.declare_parameter('initial_x', 0.0)
         self.declare_parameter('initial_y', 0.0)
         self.declare_parameter('initial_yaw', 0.0)  # degrees
@@ -56,14 +56,14 @@ class OdometryNode(Node):
         state_topic = self.get_parameter('state_topic').value
         publish_rate = self.get_parameter('publish_rate').value
         self.wheel_radius = self.get_parameter('wheel_radius').value
-        self.ticks_per_rev = self.get_parameter('ticks_per_rev').value
+        self.encoder_cpr = self.get_parameter('encoder_cpr').value
         initial_x = self.get_parameter('initial_x').value
         initial_y = self.get_parameter('initial_y').value
         initial_yaw_deg = self.get_parameter('initial_yaw').value
 
         # ---- Encoder constants ----
         self.wheel_circumference = 2.0 * math.pi * self.wheel_radius
-        self.meters_per_tick = self.wheel_circumference / self.ticks_per_rev
+        self.meters_per_tick = self.wheel_circumference / self.encoder_cpr
 
         # ---- State ----
         self.x = float(initial_x)
@@ -93,7 +93,7 @@ class OdometryNode(Node):
         self.get_logger().info(f'  IMU topic      : {imu_topic}')
         self.get_logger().info(f'  State output   : {state_topic}')
         self.get_logger().info(f'  Wheel radius   : {self.wheel_radius:.4f} m')
-        self.get_logger().info(f'  Ticks/rev      : {self.ticks_per_rev}')
+        self.get_logger().info(f'  Encoder CPR    : {self.encoder_cpr}')
         self.get_logger().info(f'  m/tick         : {self.meters_per_tick:.6f}')
         self.get_logger().info(f'  Initial pose   : ({self.x:.2f}, {self.y:.2f}) '
                                f'yaw={initial_yaw_deg:.1f}°')
