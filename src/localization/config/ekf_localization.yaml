@@ -34,36 +34,36 @@ ekf_localization_node:
     source: "hardware"
 
     # Vehicle geometry (must match your physical robot / Gazebo model)
-    wheelbase: 0.22              # Distance between front and rear axles [m]
-    wheel_radius: 0.033          # Wheel radius [m] (33 mm for hardware)
-    encoder_cpr: 5471            # Encoder counts per output-shaft revolution
+    wheelbase: 0.265 # Distance between front and rear axles [m]
+    wheel_radius: 0.033 # Wheel radius [m] (33 mm for hardware)
+    encoder_cpr: 5471 # Encoder counts per output-shaft revolution
 
     # Topics (hardware mode)
-    feedback_topic: /vehicle/feedback    # From: low_level_controller_node (Arduino encoder)
-    imu_topic: /vehicle/imu              # From: low_level_controller_node (Arduino MPU6050)
-    state_topic: /vehicle/state          # To: speed_control_node, lateral_control_node
-    publish_rate: 50.0                   # Hz (EKF prediction + publish rate)
+    feedback_topic: /vehicle/feedback # From: low_level_controller_node (Arduino encoder)
+    imu_topic: /vehicle/imu # From: low_level_controller_node (Arduino MPU6050)
+    state_topic: /vehicle/state # To: speed_control_node, lateral_control_node
+    publish_rate: 50.0 # Hz (EKF prediction + publish rate)
 
     # Process noise (Q matrix diagonal — higher = less trust in prediction model)
-    process_noise_x: 0.01        # Position X prediction noise
-    process_noise_y: 0.01        # Position Y prediction noise
-    process_noise_yaw: 0.01      # Heading prediction noise (↑5× to detect yaw drift)
-    process_noise_vel: 0.1       # Velocity prediction noise
-    process_noise_gyro_bias: 0.0001   # Gyro bias random walk (↑10× to adapt during driving)
+    process_noise_x: 0.01 # Position X prediction noise
+    process_noise_y: 0.01 # Position Y prediction noise
+    process_noise_yaw: 0.01 # Heading prediction noise (↑5× to detect yaw drift)
+    process_noise_vel: 0.1 # Velocity prediction noise
+    process_noise_gyro_bias: 0.0001 # Gyro bias random walk (↑10× to adapt during driving)
 
     # Measurement noise (R — higher = less trust in this sensor)
-    encoder_velocity_noise: 0.03   # Encoder velocity σ [m/s]
-    gyro_rate_noise: 0.1          # Gyroscope angular rate σ [rad/s] (Tuned down to trust bias est)
-    imu_yaw_noise: 0.05          # IMU comp.filter heading σ [rad] (↓2× stronger heading anchor)
+    encoder_velocity_noise: 0.03 # Encoder velocity σ [m/s]
+    gyro_rate_noise: 0.1 # Gyroscope angular rate σ [rad/s] (Tuned down to trust bias est)
+    imu_yaw_noise: 0.05 # IMU comp.filter heading σ [rad] (↓2× stronger heading anchor)
 
     # Zero-Velocity Update (ZUPT) — prevents drift when stopped
-    zupt_velocity_threshold: 0.02  # Speed below which ZUPT activates [m/s]
-    zupt_noise: 0.001              # ZUPT virtual measurement noise
+    zupt_velocity_threshold: 0.02 # Speed below which ZUPT activates [m/s]
+    zupt_noise: 0.001 # ZUPT virtual measurement noise
 
     # IMU initialization
-    imu_settle_time: 10.0        # Wait this long before trusting IMU [s]
+    imu_settle_time: 10.0 # Wait this long before trusting IMU [s]
 
     # Initial pose (can be overridden per-launch)
-    initial_x: 0.0              # Starting X position [m]
-    initial_y: 0.0              # Starting Y position [m]
-    initial_yaw: 0.0            # Starting heading [degrees]
+    initial_x: 0.0 # Starting X position [m]
+    initial_y: 0.0 # Starting Y position [m]
+    initial_yaw: 0.0 # Starting heading [degrees]

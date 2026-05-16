@@ -83,7 +83,7 @@ class EKFLocalizationNode(Node):
         # Parameters
         # ================================================================
         self.declare_parameter('source', 'hardware')           # "hardware" or "simulation"
-        self.declare_parameter('wheelbase', 0.22)              # m
+        self.declare_parameter('wheelbase', 0.265)              # m
         self.declare_parameter('wheel_radius', 0.033)          # m
         self.declare_parameter('encoder_cpr', 5471)            # counts per revolution
         self.declare_parameter('publish_rate', 50.0)           # Hz

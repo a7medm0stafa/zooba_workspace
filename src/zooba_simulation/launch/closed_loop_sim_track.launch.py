@@ -108,7 +108,7 @@ def generate_launch_description():
     # ================================================================
     # ---- Vehicle constants (from vehicle_params.yaml) --------------
     # ================================================================
-    WHEELBASE = 0.22
+    WHEELBASE = 0.265
     WHEEL_RADIUS = 0.033
     MAX_STEERING_ANGLE = 45.0
     CONTROL_RATE = 20.0

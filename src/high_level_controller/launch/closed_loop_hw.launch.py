@@ -112,7 +112,7 @@ def generate_launch_description():
             ekf_config,
             {
                 'source': 'hardware',
-                'wheelbase': 0.22,
+                'wheelbase': 0.265,
                 'wheel_radius': 0.033,
                 'encoder_cpr': 5471,
                 'feedback_topic': '/vehicle/feedback',
@@ -132,7 +132,7 @@ def generate_launch_description():
         condition=UnlessCondition(LaunchConfiguration('use_ekf')),
         parameters=[{
             'source': 'hardware',
-            'wheelbase': 0.22,
+            'wheelbase': 0.265,
             'wheel_radius': 0.033,
             'encoder_cpr': 5471,
             'use_imu_heading': True,

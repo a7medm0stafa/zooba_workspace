@@ -34,7 +34,7 @@ class GroundTruthNode(Node):
         self.declare_parameter('state_topic', '/vehicle/state')
         self.declare_parameter('publish_rate', 20.0)
         self.declare_parameter('wheel_radius', 0.033)
-        self.declare_parameter('wheelbase', 0.22)
+        self.declare_parameter('wheelbase', 0.265)
 
         pose_topic = self.get_parameter('pose_topic').value
         state_topic = self.get_parameter('state_topic').value

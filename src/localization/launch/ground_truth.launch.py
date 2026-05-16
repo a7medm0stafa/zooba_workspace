@@ -29,7 +29,7 @@ def generate_launch_description():
         'wheel_radius', default_value='0.033',
         description='Wheel radius [m]')
     wheelbase_arg = DeclareLaunchArgument(
-        'wheelbase', default_value='0.22',
+        'wheelbase', default_value='0.265',
         description='Wheelbase [m]')
 
     model_name = LaunchConfiguration('model_name')

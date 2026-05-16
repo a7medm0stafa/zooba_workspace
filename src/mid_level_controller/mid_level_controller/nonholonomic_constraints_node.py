@@ -33,7 +33,7 @@ class NonHolonomicConstraintsNode(Node):
         super().__init__('nonholonomic_constraints_node')
 
         # ---- Parameters ----
-        self.declare_parameter('wheelbase', 0.22)              # meters
+        self.declare_parameter('wheelbase', 0.265)              # meters
         self.declare_parameter('track_width', 0.20)            # meters
         self.declare_parameter('max_velocity', 2.0)            # m/s
         self.declare_parameter('max_steering_angle', 45.0)     # degrees
