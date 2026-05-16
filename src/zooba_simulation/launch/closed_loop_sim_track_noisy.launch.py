@@ -1,37 +1,55 @@
 """
-closed_loop_sim_track.launch.py — Track Simulation with Path Planner
-=====================================================================
-FILE: zooba_simulation/launch/closed_loop_sim_track.launch.py
+closed_loop_sim_track_noisy.launch.py — Track Simulation with Sensor Noise + EKF
+==================================================================================
+FILE: zooba_simulation/launch/closed_loop_sim_track_noisy.launch.py
 
-Launches a full closed-loop simulation for a specified track with:
-    1. Gazebo + Ackermann vehicle model
-    2. Pose bridge (Gazebo world-frame pose)
-    3. Ground Truth localization ONLY (no EKF, no dead-reckoning)
-    4. Simulation bridge (VehicleCmd ↔ Gazebo topics)
-    5. Path Planner node (cubic spline trajectory for the selected track)
-    6. Speed control node (PI)
-    7. Lateral control node (Extended Stanley)
-    8. Control merger node (speed + lateral → /vehicle/cmd)
+Identical to closed_loop_sim_track.launch.py EXCEPT the localization pipeline
+is replaced with a realistic noisy-sensor chain:
+
+    CLEAN PIPELINE  (closed_loop_sim_track.launch.py):
+        Gazebo ──▶ ground_truth_node ──▶ /vehicle/state ──▶ controllers
+
+    NOISY PIPELINE  (this file):
+        Gazebo ──▶ ground_truth_node ──▶ /vehicle/state_gt
+                                          │
+                                    sensor_noise_node   (adds Gaussian noise)
+                                          │
+                                  /vehicle/state_noisy
+                                          │
+                                     ekf_sim_node       (EKF filtering)
+                                          │
+                                    /vehicle/state ──▶ controllers
+
+This lets you study how sensor noise affects path-tracking performance and
+how well the EKF can attenuate that noise.
 
 SIGNAL FLOW:
-    Gazebo → /model/.../pose + /joint_states → Ground Truth → /vehicle/state
-    Path Planner reads /vehicle/state → updates desired_speed, desired_y, desired_heading
+    Gazebo → /model/.../pose + /joint_states
+        → ground_truth_node → /vehicle/state_gt  (perfect, Gazebo frame)
+        → sensor_noise_node → /vehicle/state_noisy (corrupted with Gaussian noise)
+        → ekf_sim_node → /vehicle/state (EKF-filtered estimate)
+    Path Planner reads /vehicle/state → updates desired waypoints
     Speed Control + Lateral Control → speed_cmd + lateral_cmd
     Control Merger → /vehicle/cmd
     Simulation Bridge → /steering_angle + /velocity → Gazebo
 
+NOISE PARAMETERS (tunable at launch time):
+    sigma_position  — std-dev for x, y noise [m]           (default 0.05 m)
+    sigma_yaw       — std-dev for heading noise [rad]       (default 0.02 rad)
+    sigma_velocity  — std-dev for velocity noise [m/s]      (default 0.05 m/s)
+    sigma_yaw_rate  — std-dev for yaw-rate noise [rad/s]    (default 0.01 rad/s)
+    sigma_steering  — std-dev for steering noise [rad]      (default 0.01 rad)
+
 USAGE:
-    # Track 1 (lane keeping):
-    ros2 launch zooba_simulation closed_loop_sim_track.launch.py track:=track_1
+    # Default noise, Track 3:
+    ros2 launch zooba_simulation closed_loop_sim_track_noisy.launch.py
 
-    # Track 2 (obstacle avoidance):
-    ros2 launch zooba_simulation closed_loop_sim_track.launch.py track:=track_2
+    # High position noise:
+    ros2 launch zooba_simulation closed_loop_sim_track_noisy.launch.py sigma_position:=0.15
 
-    # Track 3 (closed circuit):
-    ros2 launch zooba_simulation closed_loop_sim_track.launch.py track:=track_3
-
-    # With custom speed:
-    ros2 launch zooba_simulation closed_loop_sim_track.launch.py track:=track_2 cruise_speed:=0.20
+    # Different track + custom speed:
+    ros2 launch zooba_simulation closed_loop_sim_track_noisy.launch.py \\
+        track:=track_2 cruise_speed:=0.20 sigma_position:=0.08
 """
 
 import os
@@ -42,6 +60,8 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
+from launch.substitutions import TextSubstitution
 
 
 def generate_launch_description():
@@ -96,22 +116,46 @@ def generate_launch_description():
         description='PI integral gain'
     )
 
+    # ----------------------------------------------------------------
+    # ---- Sensor Noise parameters ------------------------------------
+    # ----------------------------------------------------------------
+    sigma_position_arg = DeclareLaunchArgument(
+        'sigma_position', default_value='0.01',
+        description='Std-dev of Gaussian position noise [m]  (x, y)'
+    )
+    sigma_yaw_arg = DeclareLaunchArgument(
+        'sigma_yaw', default_value='0.1',
+        description='Std-dev of Gaussian heading noise [rad]  (~1.1°)'
+    )
+    sigma_velocity_arg = DeclareLaunchArgument(
+        'sigma_velocity', default_value='0.01',
+        description='Std-dev of Gaussian velocity noise [m/s]'
+    )
+    sigma_yaw_rate_arg = DeclareLaunchArgument(
+        'sigma_yaw_rate', default_value='0.01',
+        description='Std-dev of Gaussian yaw-rate noise [rad/s]'
+    )
+    sigma_steering_arg = DeclareLaunchArgument(
+        'sigma_steering', default_value='0.01',
+        description='Std-dev of Gaussian steering-angle noise [rad]  (~0.6°)'
+    )
+
     # ================================================================
     # ---- Package paths ---------------------------------------------
     # ================================================================
     zooba_sim_pkg = get_package_share_directory('zooba_simulation')
-    gazebo_pkg = get_package_share_directory('gazebo_ackermann_steering_vehicle')
-    hlc_pkg = get_package_share_directory('high_level_controller')
+    gazebo_pkg    = get_package_share_directory('gazebo_ackermann_steering_vehicle')
+    hlc_pkg       = get_package_share_directory('high_level_controller')
 
     planner_config = os.path.join(hlc_pkg, 'config', 'path_planner_config.yaml')
 
     # ================================================================
     # ---- Vehicle constants (from vehicle_params.yaml) --------------
     # ================================================================
-    WHEELBASE = 0.22
-    WHEEL_RADIUS = 0.033
+    WHEELBASE          = 0.22
+    WHEEL_RADIUS       = 0.033
     MAX_STEERING_ANGLE = 45.0
-    CONTROL_RATE = 20.0
+    CONTROL_RATE       = 20.0
 
     # Simulation-specific overrides
     MAX_VELOCITY_SIM = 2.0
@@ -119,13 +163,11 @@ def generate_launch_description():
     # ================================================================
     # ---- 1. Gazebo + Vehicle Model ---------------------------------
     # ================================================================
-    # Build world path from track argument
     world_path = PathJoinSubstitution([
         zooba_sim_pkg, 'worlds',
         [LaunchConfiguration('track'), '.world']
     ])
 
-    # All tracks start at (0, 0) — unified origin for sim and hardware
     vehicle_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(gazebo_pkg, 'launch', 'vehicle.launch.py')
@@ -153,8 +195,10 @@ def generate_launch_description():
     )
 
     # ================================================================
-    # ---- 3. Ground Truth Node (ONLY localization source) -----------
+    # ---- 3a. Ground Truth Node (publishes PERFECT state to _gt) ----
     # ================================================================
+    # Key difference: state_topic is /vehicle/state_gt, NOT /vehicle/state.
+    # The EKF sim node will publish the final /vehicle/state after filtering.
     ground_truth = Node(
         package='localization',
         executable='ground_truth_node',
@@ -162,10 +206,81 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'pose_topic':   '/model/ackermann_steering_vehicle/pose',
-            'state_topic':  '/vehicle/state',
+            'state_topic':  '/vehicle/state_gt',   # ← perfect, unfiltered
             'publish_rate': 50.0,
             'wheel_radius': WHEEL_RADIUS,
             'wheelbase':    WHEELBASE,
+        }],
+    )
+
+    # ================================================================
+    # ---- 3b. Sensor Noise Node (GT → Noisy) -----------------------
+    # ================================================================
+    sensor_noise = Node(
+        package='localization',
+        executable='sensor_noise_node',
+        name='sensor_noise_node',
+        output='screen',
+        parameters=[{
+            'input_topic':    '/vehicle/state_gt',
+            'output_topic':   '/vehicle/state_noisy',
+            'sigma_position': ParameterValue(LaunchConfiguration('sigma_position'), value_type=float),
+            'sigma_yaw':      ParameterValue(LaunchConfiguration('sigma_yaw'),      value_type=float),
+            'sigma_velocity': ParameterValue(LaunchConfiguration('sigma_velocity'), value_type=float),
+            'sigma_yaw_rate': ParameterValue(LaunchConfiguration('sigma_yaw_rate'), value_type=float),
+            'sigma_steering': ParameterValue(LaunchConfiguration('sigma_steering'), value_type=float),
+            'seed':           -1,  # non-deterministic by default
+        }],
+    )
+
+    # ================================================================
+    # ---- 3c. EKF Simulation Node (Noisy → Filtered /vehicle/state) -
+    # ================================================================
+    ekf_sim = Node(
+        package='localization',
+        executable='ekf_sim_node',
+        name='ekf_sim_node',
+        output='screen',
+        parameters=[{
+            'wheelbase':           WHEELBASE,
+            'wheel_radius':        WHEEL_RADIUS,
+            'publish_rate':        50.0,
+            'noisy_state_topic':   '/vehicle/state_noisy',
+            'state_topic':         '/vehicle/state',   # ← controllers read this
+            # EKF measurement noise — match sensor_noise_node sigmas
+            'meas_noise_position': ParameterValue(LaunchConfiguration('sigma_position'), value_type=float),
+            'meas_noise_yaw':      ParameterValue(LaunchConfiguration('sigma_yaw'),      value_type=float),
+            'meas_noise_velocity': ParameterValue(LaunchConfiguration('sigma_velocity'), value_type=float),
+            # Process noise
+            'process_noise_x':          0.05,
+            'process_noise_y':          0.001,
+            'process_noise_yaw':        0.01,
+            'process_noise_vel':        0.1,
+            'process_noise_gyro_bias':  0.0001,
+            # ZUPT
+            'zupt_velocity_threshold':  0.02,
+            'zupt_noise':               0.001,
+            # Initial pose (origin)
+            'initial_x':   0.0,
+            'initial_y':   0.0,
+            'initial_yaw': 0.0,
+        }],
+    )
+
+    # ================================================================
+    # ---- 3d. State Comparison Printer (Terminal output) ------------
+    # ================================================================
+    state_comparison = Node(
+        package='localization',
+        executable='state_comparison_node',
+        name='state_comparison_node',
+        output='screen',
+        parameters=[{
+            'gt_topic':    '/vehicle/state_gt',
+            'noisy_topic': '/vehicle/state_noisy',
+            'ekf_topic':   '/vehicle/state',
+            'print_rate':  2.0,   # Hz — prints twice per second
+            'use_color':   True,
         }],
     )
 
@@ -203,7 +318,7 @@ def generate_launch_description():
                 'curve_speed':        LaunchConfiguration('curve_speed'),
                 'lookahead_distance': LaunchConfiguration('lookahead'),
                 'state_topic':        '/vehicle/state',
-                'start_delay':        3.0,  # Wait for Gazebo to settle
+                'start_delay':        3.0,
             }
         ],
     )
@@ -217,7 +332,7 @@ def generate_launch_description():
         name='speed_control_node',
         output='screen',
         parameters=[{
-            'desired_speed': 0.0,  # Will be set by path planner
+            'desired_speed': 0.0,
             'kp':            LaunchConfiguration('kp'),
             'ki':            LaunchConfiguration('ki'),
             'max_velocity':  MAX_VELOCITY_SIM,
@@ -228,7 +343,7 @@ def generate_launch_description():
     )
 
     # ================================================================
-    # ---- 7. Extended Stanley Lateral Control Node -------------------
+    # ---- 7. Extended Stanley Lateral Control Node ------------------
     # ================================================================
     lateral_control = Node(
         package='mid_level_controller',
@@ -236,16 +351,16 @@ def generate_launch_description():
         name='lateral_control_node',
         output='screen',
         parameters=[{
-            'desired_x':          0.0,    # Will be set by path planner
-            'desired_y':          0.0,    # Will be set by path planner
-            'desired_heading':    0.0,    # Will be set by path planner
+            'desired_x':          0.0,
+            'desired_y':          0.0,
+            'desired_heading':    0.0,
             'k_heading':          LaunchConfiguration('k_heading'),
             'k_stanley':          LaunchConfiguration('k_stanley'),
             'k_soft':             LaunchConfiguration('k_soft'),
             'k_d_heading':        LaunchConfiguration('k_d_heading'),
             'max_steering_angle': MAX_STEERING_ANGLE,
             'control_rate':       CONTROL_RATE,
-            'invert_steering_output': False,  # Simulation uses RHR standard
+            'invert_steering_output': False,
             'state_topic':        '/vehicle/state',
             'output_topic':       '/teleop/lateral_cmd',
         }],
@@ -269,7 +384,7 @@ def generate_launch_description():
 
     # ================================================================
     return LaunchDescription([
-        # Arguments
+        # ---- Arguments ----
         track_arg,
         cruise_speed_arg,
         curve_speed_arg,
@@ -280,16 +395,25 @@ def generate_launch_description():
         k_d_heading_arg,
         kp_arg,
         ki_arg,
-        # Gazebo
+        # Noise arguments
+        sigma_position_arg,
+        sigma_yaw_arg,
+        sigma_velocity_arg,
+        sigma_yaw_rate_arg,
+        sigma_steering_arg,
+        # ---- Gazebo ----
         vehicle_launch,
         pose_bridge,
-        # Localization (ground truth ONLY)
-        ground_truth,
-        # Simulation bridge
+        # ---- Localization chain (noisy pipeline) ----
+        ground_truth,      # GT → /vehicle/state_gt
+        sensor_noise,      # /vehicle/state_gt → /vehicle/state_noisy
+        ekf_sim,           # /vehicle/state_noisy → /vehicle/state
+        state_comparison,  # Prints GT | Noisy | EKF comparison table
+        # ---- Simulation bridge ----
         sim_bridge,
-        # Path planner
+        # ---- Path planner ----
         path_planner,
-        # Mid-level controllers
+        # ---- Mid-level controllers ----
         speed_control,
         lateral_control,
         cmd_merger,
