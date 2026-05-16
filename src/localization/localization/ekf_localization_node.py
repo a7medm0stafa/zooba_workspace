@@ -489,15 +489,25 @@ class EKFLocalizationNode(Node):
 
         # ---- Diagnostic log (throttled) ----
         cov = self.ekf.covariance_diagonal
+        imu_yaw_deg = math.degrees(self.latest_imu_yaw_rad) if self.latest_imu_yaw_rad is not None else 0.0
+
+        # RAW SENSORS: what the hardware is reporting
         self.get_logger().info(
-            f'[EKF] pos=({self.ekf.position_x:.3f},{self.ekf.position_y:.3f}) '
-            f'yaw={math.degrees(self.ekf.heading):.1f}° '
+            f'[RAW ] gyro_z={math.degrees(self.latest_gyro_z):.3f}°/s '
+            f'imu_yaw={imu_yaw_deg:.2f}° '
+            f'enc_vel={self.last_encoder_velocity:.3f}m/s '
+            f'steer={math.degrees(self.current_steering_angle):.2f}°',
+            throttle_duration_sec=1.0
+        )
+
+        # EKF OUTPUT: what the filter produces after fusion
+        self.get_logger().info(
+            f'[EKF ] pos=({self.ekf.position_x:.3f},{self.ekf.position_y:.3f}) '
+            f'yaw={math.degrees(self.ekf.heading):.2f}° '
             f'v={self.ekf.velocity:.3f} '
-            f'bias={math.degrees(self.ekf.gyro_bias):.3f}°/s '
-            f'σ_xy=({math.sqrt(cov[0]):.3f},{math.sqrt(cov[1]):.3f}) '
-            f'imu={"OK" if self.imu_initialized else "SETTLING"} '
-            f'enc={"OK" if self.last_ticks is not None else "WAIT"}',
-            throttle_duration_sec=2.0
+            f'bias={math.degrees(self.ekf.gyro_bias):.4f}°/s '
+            f'σ=({math.sqrt(cov[0]):.3f},{math.sqrt(cov[1]):.3f},{math.sqrt(cov[2]):.4f})',
+            throttle_duration_sec=1.0
         )
 
     # ================================================================
