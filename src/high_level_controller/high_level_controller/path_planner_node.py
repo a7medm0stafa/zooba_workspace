@@ -217,12 +217,12 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
             (6.5, -0.15),        # approach zone before obstacle 2
             (6.8, -0.15),        # hold lane until last moment
             (7.2,  0.0),           # begin lane change to left
-            (7.6,  0.1875),        # in left lane before obstacle 2
-            (8.0,  0.1875),        # passing obstacle 2
-            (8.5,  0.1875),        # anchor left lane
-            (9.0,  0.1875),        # past obstacle 2
-            (9.5,  0.1875),        # anchor straight
-            (10.0, 0.1875),        # finish
+            (7.6,  0.2),        # in left lane before obstacle 2
+            (8.0,  0.2),        # passing obstacle 2
+            (8.5,  0.2),        # anchor left lane
+            (9.0,  0.2),        # past obstacle 2
+            (9.5,  0.2),        # anchor straight
+            (10.0, 0.2),        # finish
         ], False  # not closed
 
     elif track_name == 'track_3':
