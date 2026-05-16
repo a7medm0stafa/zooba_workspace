@@ -45,9 +45,9 @@ ekf_localization_node:
     publish_rate: 50.0 # Hz (EKF prediction + publish rate)
 
     # Process noise (Q matrix diagonal — higher = less trust in prediction model)
-    process_noise_x: 0.01 # Position X prediction noise
-    process_noise_y: 0.01 # Position Y prediction noise
-    process_noise_yaw: 0.01 # Heading prediction noise (↑5× to detect yaw drift)
+    process_noise_x: 0.001 # Position X prediction noise
+    process_noise_y: 0.001 # Position Y prediction noise
+    process_noise_yaw: 0.001 # Heading prediction noise (↑5× to detect yaw drift)
     process_noise_vel: 0.1 # Velocity prediction noise
     process_noise_gyro_bias: 0.00001 # Gyro bias random walk (↑10× to adapt during driving)
 
