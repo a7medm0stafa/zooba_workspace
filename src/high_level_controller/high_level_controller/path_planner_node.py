@@ -199,35 +199,29 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
         #
         # Strategy: start at origin, merge into left lane, switch right
         #           before Obs1, switch left before Obs2, finish
-        # NOTE: Double-anchor waypoints before/after each lane change
-        #       pin the spline flat and prevent early curvature.
-        #       Lane changes use 0.4m X-distance for aggressive S-curves.
         return [
             (0.0,  0.0),           # START at origin
-            (0.5,  0.09),          # merge into left lane
-            (1.0,  0.1875),        # in left lane
-            (1.5,  0.1875),        # anchor
-            (2.0,  0.1875),        # anchor — hold flat longer
-            (2.5,  0.1875),        # double-anchor before transition
-            # --- Lane change RIGHT (avoid obstacle 1 at X=4) ---
-            (2.8,  0.1875),        # firm anchor right before change
-            (3.0,  0.0),           # sharp midpoint
-            (3.2, -0.1875),        # in right lane (0.4m transition)
-            (3.4, -0.1875),        # anchor right lane immediately
-            (4.0, -0.1875),        # passing obstacle 1 (at X=4)
+            (0.5,  0.0),           # settle straight
+            (1.0,  0.1),           # begin merge into left lane
+            (1.5,  0.1875),        # in left lane
+            (2.0,  0.1875),        # anchor straight
+            (2.5,  0.1875),        # approach zone before obstacle 1
+            (2.8,  0.1875),        # hold lane until last moment
+            (3.2,  0.0),           # begin lane change to right
+            (3.6, -0.1875),        # in right lane before obstacle 1
+            (4.0, -0.1875),        # passing obstacle 1
             (4.5, -0.1875),        # anchor right lane
             (5.0, -0.1875),        # cruising right lane
-            (5.5, -0.1875),        # hold right lane
-            (6.0, -0.1875),        # anchor — hold flat longer
-            (6.5, -0.1875),        # double-anchor before transition
-            # --- Lane change LEFT (avoid obstacle 2 at X=8) ---
-            (6.8, -0.1875),        # firm anchor right before change
-            (7.0,  0.0),           # sharp midpoint
-            (7.2,  0.1875),        # in left lane (0.4m transition)
-            (7.4,  0.1875),        # anchor left lane immediately
-            (8.0,  0.1875),        # passing obstacle 2 (at X=8)
+            (5.5, -0.1875),        # anchor right lane
+            (6.0, -0.1875),        # anchor right lane
+            (6.5, -0.1875),        # approach zone before obstacle 2
+            (6.8, -0.1875),        # hold lane until last moment
+            (7.2,  0.0),           # begin lane change to left
+            (7.6,  0.1875),        # in left lane before obstacle 2
+            (8.0,  0.1875),        # passing obstacle 2
             (8.5,  0.1875),        # anchor left lane
             (9.0,  0.1875),        # past obstacle 2
+            (9.5,  0.1875),        # anchor straight
             (10.0, 0.1875),        # finish
         ], False  # not closed
 
