@@ -48,7 +48,7 @@ def generate_launch_description():
         description='Arduino serial port'
     )
     desired_speed_arg = DeclareLaunchArgument(
-        'desired_speed', default_value='0.15',
+        'desired_speed', default_value='0.0',
         description='Goal speed [m/s]'
     )
     desired_y_arg = DeclareLaunchArgument(
