@@ -52,7 +52,7 @@ ekf_localization_node:
     process_noise_gyro_bias: 0.00001 # Gyro bias random walk (↑10× to adapt during driving)
 
     # Measurement noise (R — higher = less trust in this sensor)
-    encoder_velocity_noise: 0.001 # Encoder velocity σ [m/s]
+    encoder_velocity_noise: 0.01 # Encoder velocity σ [m/s]
     gyro_rate_noise: 0.05 # Gyroscope angular rate σ [rad/s] (Tuned down to trust bias est)
     imu_yaw_noise: 0.05 # IMU comp.filter heading σ [rad] (↓2× stronger heading anchor)
 
