@@ -53,6 +53,7 @@ class LateralControlNode(Node):
         self.declare_parameter('k_soft', 1.0)                  # softening constant
         self.declare_parameter('k_d_heading', 0.1)             # heading derivative damping
         self.declare_parameter('max_steering_angle', 45.0)     # degrees
+        self.declare_parameter('steering_offset', 0.0)         # constant bias [degrees] (positive = left)
         self.declare_parameter('control_rate', 20.0)           # Hz
         self.declare_parameter('invert_steering_output', False) # Flips sign of steering output
         self.declare_parameter('state_topic', '/vehicle/state')
@@ -68,6 +69,7 @@ class LateralControlNode(Node):
         self.k_soft = self.get_parameter('k_soft').value
         self.k_d_heading = self.get_parameter('k_d_heading').value
         self.max_steering_angle = self.get_parameter('max_steering_angle').value
+        self.steering_offset = self.get_parameter('steering_offset').value
         self.invert_steering_output = self.get_parameter('invert_steering_output').value
         control_rate = self.get_parameter('control_rate').value
         state_topic = self.get_parameter('state_topic').value
@@ -108,6 +110,7 @@ class LateralControlNode(Node):
         self.get_logger().info(f'  k_stanley       : {self.k_stanley}')
         self.get_logger().info(f'  k_soft          : {self.k_soft}')
         self.get_logger().info(f'  k_d_heading     : {self.k_d_heading}')
+        self.get_logger().info(f'  Steering offset : {self.steering_offset}° (positive = left)')
         self.get_logger().info(f'  Max steering    : ±{self.max_steering_angle:.1f}°')
         self.get_logger().info(f'  Invert Output   : {self.invert_steering_output}')
         self.get_logger().info(f'  Control rate    : {control_rate:.0f} Hz')
@@ -136,6 +139,8 @@ class LateralControlNode(Node):
                 self.k_soft = param.value
             elif param.name == 'k_d_heading':
                 self.k_d_heading = param.value
+            elif param.name == 'steering_offset':
+                self.steering_offset = param.value
         return SetParametersResult(successful=True)
 
     def _state_callback(self, msg: VehicleState):
@@ -188,6 +193,9 @@ class LateralControlNode(Node):
 
         # Convert to degrees
         steering_deg = math.degrees(steering_rad)
+        
+        # Apply steering offset (compensates mechanical misalignment)
+        steering_deg += self.steering_offset
         
         # Apply hardware/sim inversion 
         if self.invert_steering_output:
