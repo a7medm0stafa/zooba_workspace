@@ -36,7 +36,7 @@ lateral_control_node:
     k_soft: 1.0                 # Softening constant (avoids div-by-zero)
     k_d_heading: 0.05           # Heading derivative damping (↓ faster response)
     max_steering_angle: 45.0    # Steering output saturation [degrees]
-    steering_offset: 0.0       # Hardware calibration: servo "82" is not mechanically
+    steering_offset: 2.0       # Hardware calibration: servo "82" is not mechanically
                                  # straight. This constant bias [degrees] (positive = left)
                                  # compensates for the rightward drift. NOT an EKF param —
                                  # this is a physical servo/linkage misalignment correction.
