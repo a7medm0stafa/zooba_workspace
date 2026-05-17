@@ -137,12 +137,10 @@ class EKFLocalizationNode(Node):
         self.latest_imu_yaw_rad = None    # rad (after offset correction)
         self.start_time = None
 
-        # Gyro bias estimation (two-layer approach)
-        # Layer 1: Static calibration during settle period
+        # Gyro bias estimation
+        # Static calibration during 5-second settle period only
         self.gyro_z_settle_samples = []   # accumulate gyro_z during settling
         self.gyro_z_bias = 0.0            # estimated bias [rad/s]
-        # Layer 2: ZUPT-based runtime tracking (exponential moving average)
-        self.zupt_bias_alpha = 0.01       # EMA smoothing factor (slow adaptation)
 
         # Simulation
         self.sim_velocity = 0.0
@@ -385,14 +383,6 @@ class EKFLocalizationNode(Node):
 
         if is_stationary:
             self.ekf.zupt(self.R_zupt)
-
-            # ---- ZUPT-based runtime bias tracking ----
-            # When stationary, true yaw rate = 0. Any nonzero gyro reading is bias.
-            # Track with slow EMA to handle temperature drift during long runs.
-            if self.source == 'hardware':
-                raw_gz = self.latest_gyro_z
-                self.gyro_z_bias = (self.zupt_bias_alpha * raw_gz
-                                    + (1.0 - self.zupt_bias_alpha) * self.gyro_z_bias)
 
         # ---- IMU heading update (DISABLED by default) ----
         if (self.use_imu_heading
