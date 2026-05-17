@@ -117,7 +117,7 @@ class EKF2D:
         # ---- State prediction f(x, u, dt) ----
         x_new = x + v * cos_th * dt
         y_new = y + v * sin_th * dt
-        theta_new = theta + omega_z * dt
+        theta_new = theta - omega_z * dt
         v_new = v  # constant velocity model
 
         # ---- Jacobian F = ∂f/∂x ----
