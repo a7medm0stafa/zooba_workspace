@@ -9,7 +9,7 @@
 
 path_planner_node:
   ros__parameters:
-    cruise_speed: 0.25          # [m/s] nominal straight-line speed
+    cruise_speed: 0.15          # [m/s] nominal straight-line speed
     curve_speed: 0.06           # [m/s] speed in tight curves (increased for faster turns)
     lookahead_distance: 0.10    # [m] distance ahead on path for target point
     waypoint_tolerance: 0.15    # [m] cross-track snap distance
