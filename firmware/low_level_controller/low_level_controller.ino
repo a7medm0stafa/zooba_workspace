@@ -65,7 +65,7 @@ const unsigned long RPM_INTERVAL_MS = 100;
 const unsigned long IMU_INTERVAL_MS = 10;  // 100Hz IMU + EKF
 
 // ==================== Servo Constants ====================
-const int SERVO_CENTER = 84;  // Calibrated for rightward drift
+const int SERVO_CENTER = 82;  // Calibrated for rightward drift
 const int SERVO_MIN = 37;
 const int SERVO_MAX = 127;
 
@@ -360,7 +360,7 @@ void initIMU() {
     uint8_t whoami = Wire.read();
     if (whoami == 0x68 || whoami == 0x98) {
       long zSum = 0;
-      int samples = 200;
+      int samples = 500;  // More samples = better bias calibration
       for (int i = 0; i < samples; i++) {
         Wire.beginTransmission(MPU6050_ADDR);
         Wire.write(0x47);
@@ -499,14 +499,23 @@ void loop() {
     // NOTE: imuGyroZ is negated once in readIMU(). The Pi LLC negated it
     // AGAIN before feeding the Pi EKF. We must negate here to match
     // the REP-103 convention (CCW = positive yaw rate).
-    ekfPredict(-imuGyroZ, imuDt);
+    // When stationary, feed zero gyro to prevent heading drift from
+    // residual bias not captured by the 200-sample boot calibration.
+    bool stationary = (abs(ekf_encoder_velocity) < ZUPT_VEL_THRESH);
+    float gyro_for_ekf = stationary ? 0.0 : (-imuGyroZ);
+    ekfPredict(gyro_for_ekf, imuDt);
 
     // EKF Ackermann heading update: uses ACTUAL servo angle
-    ekfAckermannUpdate(lastServoAngle, imuDt);
+    // Skip when stationary (no meaningful heading info from steering)
+    if (!stationary) {
+      ekfAckermannUpdate(lastServoAngle, imuDt);
+    }
 
-    // ZUPT when nearly stationary
-    if (abs(ekf_encoder_velocity) < ZUPT_VEL_THRESH) {
+    // ZUPT when nearly stationary: clamp velocity AND heading
+    if (stationary) {
       ekfZUPT();
+      // Also lock heading — car can't turn when not moving
+      ekfScalarUpdate(ekf_x[2], 2, EKF_R_ZUPT);
     }
   }
 
