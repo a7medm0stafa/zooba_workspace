@@ -191,7 +191,7 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
             (7.5, 0.0),
             (10.0, 0.0),
             (11.0, 0.0),
-        ], False  # not closed
+        ], False  # not closedd
 
     elif track_name == 'track_2':
         # Two-lane track with obstacles:
