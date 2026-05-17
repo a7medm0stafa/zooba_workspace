@@ -75,6 +75,11 @@ class EKFLocalizationNode(Node):
         self.declare_parameter('use_imu_heading', False)
         self.declare_parameter('heading_update_divisor', 10)
 
+        # Ackermann heading correction (fights dynamic gyro bias)
+        self.declare_parameter('use_ackermann_heading', True)
+        self.declare_parameter('sigma_ackermann_heading', 0.3)
+        self.declare_parameter('ackermann_min_velocity', 0.03)
+
         # Initial pose
         self.declare_parameter('initial_x', 0.0)
         self.declare_parameter('initial_y', 0.0)
@@ -96,6 +101,11 @@ class EKFLocalizationNode(Node):
         self.imu_settle_time = self.get_parameter('imu_settle_time').value
         self.use_imu_heading = self.get_parameter('use_imu_heading').value
         self.heading_update_divisor = self.get_parameter('heading_update_divisor').value
+
+        # Ackermann heading correction
+        self.use_ackermann_heading = self.get_parameter('use_ackermann_heading').value
+        self.R_ackermann = self.get_parameter('sigma_ackermann_heading').value ** 2
+        self.ackermann_min_velocity = self.get_parameter('ackermann_min_velocity').value
 
         sigma_v = self.get_parameter('sigma_velocity').value
         sigma_omega = self.get_parameter('sigma_yaw_rate').value
@@ -153,6 +163,7 @@ class EKFLocalizationNode(Node):
         # Output fields
         self.current_yaw_rate = 0.0
         self.current_steering_angle = 0.0
+        self.commanded_steering_rad = 0.0  # raw commanded steering for Ackermann
 
         # ================================================================
         # Publisher & TF
@@ -201,6 +212,10 @@ class EKFLocalizationNode(Node):
         self.get_logger().info(f'  σ_encoder         : {math.sqrt(self.R_encoder):.4f}')
         self.get_logger().info(f'  ZUPT threshold    : {self.zupt_velocity_threshold:.3f} m/s')
         self.get_logger().info(f'  IMU heading update: {"ENABLED" if self.use_imu_heading else "DISABLED"}')
+        self.get_logger().info(f'  Ackermann heading : {"ENABLED" if self.use_ackermann_heading else "DISABLED"}')
+        if self.use_ackermann_heading:
+            self.get_logger().info(f'    σ_ackermann     : {math.sqrt(self.R_ackermann):.3f} rad')
+            self.get_logger().info(f'    min velocity    : {self.ackermann_min_velocity:.3f} m/s')
         self.get_logger().info(f'  IMU settle time   : {self.imu_settle_time:.1f} s')
         self.get_logger().info(f'  Initial pose      : ({initial_x:.2f}, {initial_y:.2f}) '
                                f'yaw={initial_yaw_deg:.1f}°')
@@ -282,6 +297,7 @@ class EKFLocalizationNode(Node):
         msg.heading is in degrees — convert to radians at input boundary.
         """
         self.current_steering_angle = math.radians(msg.heading)
+        self.commanded_steering_rad = self.current_steering_angle
 
     # ================================================================
     # Simulation Callback
@@ -389,6 +405,18 @@ class EKFLocalizationNode(Node):
                 and self.latest_imu_yaw_rad is not None
                 and self.timer_tick_count % self.heading_update_divisor == 0):
             self.ekf.update_heading(self.latest_imu_yaw_rad, self.R_heading)
+
+        # ---- Ackermann heading correction ----
+        # Cross-checks gyro heading rate against Ackermann kinematics
+        # Only active when moving (need velocity for Ackermann to work)
+        if (self.use_ackermann_heading
+                and abs(self.ekf.velocity) > self.ackermann_min_velocity):
+            self.ekf.update_heading_from_ackermann(
+                steering_angle=self.commanded_steering_rad,
+                wheelbase=self.wheelbase,
+                dt=dt,
+                R=self.R_ackermann,
+            )
 
         # ---- Publish VehicleState ----
         state = VehicleState()

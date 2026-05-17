@@ -39,6 +39,10 @@ MEASUREMENT MODELS:
         so using it double-counts gyro data. Kept for future use with
         magnetometer or GPS heading.)
     3. ZUPT (v ≈ 0):      z = 0,      h(x) = v,  H = [0,0,0,1]
+    4. Ackermann heading rate:  z = θ_prev + (v·tan(δ)/L)·dt,
+       h(x) = θ,  H = [0,0,1,0]
+       Cross-checks gyro-integrated heading against Ackermann kinematics.
+       Fights dynamic gyro bias from motor vibrations.
 
 ALL UNITS: meters, radians, seconds. No exceptions.
 """
@@ -79,6 +83,9 @@ class EKF2D:
         self._sigma_v = sigma_v
         self._sigma_omega = sigma_omega
 
+        # ---- Pre-prediction heading (for Ackermann update) ----
+        self._theta_pre_predict = 0.0
+
     # ==================== Initialization ====================
 
     def set_initial_state(self, x: float, y: float, theta: float,
@@ -110,6 +117,9 @@ class EKF2D:
             return
 
         x, y, theta, v = self.x
+
+        # Store pre-prediction heading for Ackermann update
+        self._theta_pre_predict = theta
 
         cos_th = math.cos(theta)
         sin_th = math.sin(theta)
@@ -232,6 +242,57 @@ class EKF2D:
         z_pred = np.array([self.x[self.IV]])
 
         self._joseph_update(z, z_pred, H, np.array([[R]]))
+
+    def update_heading_from_ackermann(self, steering_angle: float,
+                                       wheelbase: float,
+                                       dt: float, R: float):
+        """Ackermann heading rate measurement update.
+
+        Uses the Ackermann kinematic model to compute the expected
+        heading based on current velocity and steering angle, then
+        treats it as a heading measurement to correct gyro drift.
+
+        How it works:
+            θ_expected = θ_pre_predict + (v · tan(δ) / L) · dt
+        where θ_pre_predict was saved before the gyro prediction.
+        The EKF then compares θ_expected vs θ_current (gyro-predicted)
+        and corrects toward a blend of the two.
+
+        This fights dynamic gyro bias from motor vibrations by providing
+        an independent heading rate estimate from steering geometry.
+
+        Parameters
+        ----------
+        steering_angle : float
+            Commanded steering angle δ [rad].
+        wheelbase : float
+            Distance between front and rear axles L [m].
+        dt : float
+            Time step [s].
+        R : float
+            Measurement noise variance (σ²) [rad²].
+            Higher = trust gyro more, Lower = trust Ackermann more.
+            Recommended: 0.05 to 0.5 (rad²).
+        """
+        if dt <= 0.0:
+            return
+
+        v = self.x[self.IV]
+
+        # Ackermann yaw rate: ω = v · tan(δ) / L
+        # Clamp steering to avoid tan() blowup near ±90°
+        delta_clamped = max(-1.2, min(1.2, steering_angle))
+        omega_ackermann = v * math.tan(delta_clamped) / wheelbase
+
+        # Ackermann-predicted heading:
+        # "Starting from where we were before prediction, heading should
+        #  have changed by ω_ackermann · dt"
+        theta_ackermann = self._normalize_angle(
+            self._theta_pre_predict + omega_ackermann * dt
+        )
+
+        # Use the existing heading update with angle wrapping
+        self.update_heading(theta_ackermann, R)
 
     # ==================== Core EKF Math ====================
 
