@@ -55,7 +55,7 @@ ekf_localization_node:
     # Ackermann heading correction — fights dynamic gyro bias from vibrations
     # Uses steering geometry to cross-check gyro heading rate
     use_ackermann_heading: true   # ENABLED: essential for hardware
-    sigma_ackermann_heading: 0.3  # rad — noise of Ackermann heading estimate
+    sigma_ackermann_heading: 0.1  # rad — noise of Ackermann heading estimate
                                   # Lower = trust Ackermann more (corrects faster)
                                   # Higher = trust gyro more (smoother but more drift)
                                   # Start at 0.3, decrease if heading still drifts
