@@ -496,7 +496,10 @@ void loop() {
     updateYaw(imuDt);
 
     // EKF Predict: use bias-corrected gyro_z
-    ekfPredict(imuGyroZ, imuDt);
+    // NOTE: imuGyroZ is negated once in readIMU(). The Pi LLC negated it
+    // AGAIN before feeding the Pi EKF. We must negate here to match
+    // the REP-103 convention (CCW = positive yaw rate).
+    ekfPredict(-imuGyroZ, imuDt);
 
     // EKF Ackermann heading update: uses ACTUAL servo angle
     ekfAckermannUpdate(lastServoAngle, imuDt);
