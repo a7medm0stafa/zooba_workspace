@@ -172,16 +172,16 @@ unsigned long lastIMUTime = 0;
 // ==================== Encoder ISR ====================
 void encoderISR_A() {
   if (digitalRead(PIN_ENC_A) != digitalRead(PIN_ENC_B))
-    encoderTicks++;
-  else
     encoderTicks--;
+  else
+    encoderTicks++;
 }
 
 void encoderISR_B() {
   if (digitalRead(PIN_ENC_A) == digitalRead(PIN_ENC_B))
-    encoderTicks++;
-  else
     encoderTicks--;
+  else
+    encoderTicks++;
 }
 
 // ==================== IMU Functions ====================

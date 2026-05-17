@@ -224,9 +224,8 @@ class LowLevelControllerNode(Node):
                 imu_msg.header.stamp = self.get_clock().now().to_msg()
                 imu_msg.header.frame_id = 'imu_link'
                 # Values are ×100 integers from Arduino.
-                # The Arduino firmware negation (line 288) is WRONG for this
-                # board's chip mounting. The LLC must negate again to restore
-                # correct REP-103 signs (CCW-positive, CW-negative).
+                # The Python node negates these to match the physical IMU placement
+                # to the REP-103 coordinates.
                 imu_msg.accel_x = int(parts[2]) / 100.0
                 imu_msg.accel_y = -(int(parts[3]) / 100.0)
                 imu_msg.accel_z = int(parts[4]) / 100.0
