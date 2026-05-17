@@ -128,6 +128,11 @@ float imuGyroX = 0.0, imuGyroY = 0.0, imuGyroZ = 0.0;    // rad/s
 float imuYaw = 0.0; // Complementary filter yaw (degrees)
 bool imuReady = false;
 
+// Gyro Z averaging (anti-aliasing for 100Hz→10Hz serial bottleneck)
+float gyroZAccum = 0.0;   // accumulated gyroZ values between feedback sends
+int   gyroZCount = 0;     // number of samples accumulated
+float gyroZAvg   = 0.0;   // latest averaged value (sent over serial)
+
 // ==================== Timing ====================
 const unsigned long BAUD_RATE = 115200;
 
@@ -286,6 +291,10 @@ void readIMU() {
   float correctedGyroZ = rawGyroZ - gyroZOffset;
   // Invert Z-axis so CCW is positive and CW is negative (Right-Hand Rule)
   imuGyroZ = -(correctedGyroZ / GYRO_SCALE) * DEG_TO_RAD;
+
+  // Accumulate for averaging (anti-aliasing: 100Hz read → 10Hz send)
+  gyroZAccum += imuGyroZ;
+  gyroZCount++;
 }
 
 void updateYaw(float dt) {
@@ -413,12 +422,12 @@ void loop() {
     lastRPMTime = now;
 
     if (dt > 0)
-      currentRPM = ((float)abs(deltaTicks) / (float)ENCODER_CPR) * (60.0 / dt);
+      currentRPM = ((float)deltaTicks / (float)ENCODER_CPR) * (60.0 / dt);
 
     // --- PI control (if enabled) ---
     if (piEnabled) {
-      float signedRPM = (deltaTicks >= 0) ? currentRPM : -currentRPM;
-      int pwm = computePI(piTargetRPM, signedRPM, dt);
+      // currentRPM is now signed (H4 fix), no need for signedRPM workaround
+      int pwm = computePI(piTargetRPM, currentRPM, dt);
 
       if (abs(piTargetRPM) < 0.1) {
         stopMotor();
@@ -536,8 +545,14 @@ void sendFeedback() {
     Serial.print((int)(imuGyroX * 100));
     Serial.print(",");
     Serial.print((int)(imuGyroY * 100));
+    // Send averaged gyroZ (anti-aliased) instead of instantaneous
+    if (gyroZCount > 0) {
+      gyroZAvg = gyroZAccum / gyroZCount;
+      gyroZAccum = 0.0;
+      gyroZCount = 0;
+    }
     Serial.print(",");
-    Serial.print((int)(imuGyroZ * 100));
+    Serial.print((int)(gyroZAvg * 100));
     Serial.print(",");
     Serial.print((int)(imuYaw * 10));
   }
