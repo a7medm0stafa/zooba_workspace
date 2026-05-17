@@ -1,31 +1,20 @@
 # =====================================================================
-# EKF Localization — Default Parameters
+# EKF Localization v2.0 — Default Parameters
 # =====================================================================
-# FILE: localization/config/ekf_localization.yaml
-# STATUS: NEW FILE — added as part of EKF localization upgrade
-# CREATED: 2026-04-24
-#
-# WHAT THIS FILE DOES:
-#   Contains all tunable EKF parameters with default values and
-#   documentation. Loaded automatically by ekf_localization.launch.py.
-#   Can be overridden per-parameter from any launch file.
-#
-# HOW TO USE:
-#   Option 1: Use the standalone launch file (loads this YAML):
-#       ros2 launch localization ekf_localization.launch.py
-#
-#   Option 2: Override parameters in a launch file:
-#       The closed_loop_hw.launch.py and closed_loop_sim.launch.py
-#       already override these values as needed.
+# FILE:    localization/config/ekf_localization.yaml
+# STATUS:  REWRITTEN for 4-state EKF (replaces old 5-state config)
+# CREATED: 2026-05-17
 #
 # TUNING GUIDELINES:
-#   process_noise_*:        increase → faster adaptation, more noise in output
-#                           decrease → smoother output, slower adaptation
-#   encoder/gyro/imu noise: increase → DISTRUST that sensor
-#                           decrease → TRUST that sensor more
-#   zupt_velocity_threshold: speed below which robot is "stopped"
-#   imu_yaw_noise:          set HIGH (~0.15 rad ≈ 8.5°) to use IMU heading
-#                           only as a soft anchor for long-term drift correction
+#   sigma_velocity:       ↑ = faster adaptation, noisier position
+#                         ↓ = smoother position, slower adaptation
+#   sigma_yaw_rate:       ↑ = heading tracks gyro less rigidly
+#                         ↓ = heading trusts gyro more
+#   sigma_encoder:        ↑ = distrust encoder velocity
+#                         ↓ = trust encoder velocity
+#   sigma_imu_heading:    ↑ = distrust Arduino heading (recommended)
+#                         only matters if use_imu_heading = true
+#   sigma_zupt:           keep very small — stationary is high confidence
 # =====================================================================
 
 ekf_localization_node:
@@ -33,37 +22,37 @@ ekf_localization_node:
     # Mode: "hardware" (encoder + IMU) or "simulation" (Gazebo joint_states)
     source: "hardware"
 
-    # Vehicle geometry (must match your physical robot / Gazebo model)
-    wheelbase: 0.265 # Distance between front and rear axles [m]
-    wheel_radius: 0.033 # Wheel radius [m] (33 mm for hardware)
-    encoder_cpr: 5471 # Encoder counts per output-shaft revolution
+    # Vehicle geometry
+    wheelbase: 0.265         # Distance between front and rear axles [m]
+    wheel_radius: 0.033      # Wheel radius [m]
+    encoder_cpr: 5471        # Encoder counts per output-shaft revolution
+    gear_ratio: 124.333      # Total gear ratio (motor shaft → output shaft)
 
     # Topics (hardware mode)
-    feedback_topic: /vehicle/feedback # From: low_level_controller_node (Arduino encoder)
-    imu_topic: /vehicle/imu # From: low_level_controller_node (Arduino MPU6050)
-    state_topic: /vehicle/state # To: speed_control_node, lateral_control_node
-    publish_rate: 50.0 # Hz (EKF prediction + publish rate)
+    feedback_topic: /vehicle/feedback
+    imu_topic: /vehicle/imu
+    state_topic: /vehicle/state
+    publish_rate: 50.0       # Hz (EKF prediction + publish rate)
 
-    # Process noise (Q matrix diagonal — higher = less trust in prediction model)
-    process_noise_x: 0.1 # Position X prediction noise
-    process_noise_y: 0.1 # Position Y prediction noise
-    process_noise_yaw: 0.1 # Heading prediction noise (↑5× to detect yaw drift)
-    process_noise_vel: 0.1 # Velocity prediction noise
-    process_noise_gyro_bias: 0.01 # Gyro bias random walk (↑10× to adapt during driving)
+    # Process noise (continuous-time standard deviations)
+    # These feed into Q = G · diag(σ², σ²) · Gᵀ (noise-input formulation)
+    sigma_velocity: 0.1      # m/s — velocity prediction noise
+    sigma_yaw_rate: 0.02     # rad/s — gyro rate noise
 
-    # Measurement noise (R — higher = less trust in this sensor)
-    encoder_velocity_noise: 0.01 # Encoder velocity σ [m/s]
-    gyro_rate_noise: 0.05 # Gyroscope angular rate σ [rad/s] (Tuned down to trust bias est)
-    imu_yaw_noise: 0.05 # IMU comp.filter heading σ [rad] (↓2× stronger heading anchor)
+    # Measurement noise (standard deviations)
+    sigma_encoder: 0.05      # m/s — encoder velocity measurement noise
+    sigma_imu_heading: 0.20  # rad (~11.5°) — IMU heading noise (if enabled)
 
-    # Zero-Velocity Update (ZUPT) — prevents drift when stopped
-    zupt_velocity_threshold: 0.02 # Speed below which ZUPT activates [m/s]
-    zupt_noise: 0.001 # ZUPT virtual measurement noise
+    # Zero-Velocity Update (ZUPT) — prevents drift when stationary
+    zupt_velocity_threshold: 0.02  # Speed below which ZUPT activates [m/s]
+    sigma_zupt: 0.001        # m/s — ZUPT virtual measurement noise
 
-    # IMU initialization
-    imu_settle_time: 10.0 # Wait this long before trusting IMU [s]
+    # IMU configuration
+    imu_settle_time: 5.0     # Wait before trusting IMU [s]
+    use_imu_heading: false   # DISABLED: Arduino yaw is pure gyro integration
+    heading_update_divisor: 10  # Apply heading update every Nth timer tick
 
     # Initial pose (can be overridden per-launch)
-    initial_x: 0.0 # Starting X position [m]
-    initial_y: 0.0 # Starting Y position [m]
-    initial_yaw: 0.0 # Starting heading [degrees]
+    initial_x: 0.0           # Starting X position [m]
+    initial_y: 0.0           # Starting Y position [m]
+    initial_yaw: 0.0         # Starting heading [degrees]

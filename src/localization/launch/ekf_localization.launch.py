@@ -1,34 +1,14 @@
 """
 EKF Localization Launch File
 ==============================
-FILE: localization/launch/ekf_localization.launch.py
-STATUS: NEW FILE — added as part of EKF localization upgrade
-CREATED: 2026-04-24
+FILE:    localization/launch/ekf_localization.launch.py
+STATUS:  UPDATED for EKF v2.0 (4-state filter)
+UPDATED: 2026-05-17
 
-WHAT THIS FILE DOES:
-    Standalone launch file for the EKF localization node.
-    Loads default parameters from config/ekf_localization.yaml,
-    then allows overrides via launch arguments.
-
-MODES OF OPERATION:
-    1. Hardware mode (real car — encoder + IMU):
-        ros2 launch localization ekf_localization.launch.py
-        ros2 launch localization ekf_localization.launch.py source:=hardware
-
-    2. Simulation mode (Gazebo — /joint_states):
-        ros2 launch localization ekf_localization.launch.py source:=simulation
-
-    3. Custom initial pose:
-        ros2 launch localization ekf_localization.launch.py initial_x:=1.0 initial_yaw:=90.0
-
-    4. Custom IMU topic:
-        ros2 launch localization ekf_localization.launch.py imu_topic:=/imu/data
-
-NOTE:
-    For closed-loop control, use the integrated launch files instead:
-        Hardware: ros2 launch high_level_controller closed_loop_hw.launch.py
-        Simulation: ros2 launch zooba_simulation closed_loop_sim.launch.py
-    These already include the EKF node with appropriate parameters.
+MODES:
+    Hardware:   ros2 launch localization ekf_localization.launch.py
+    Simulation: ros2 launch localization ekf_localization.launch.py source:=simulation
+    Custom pose: ros2 launch localization ekf_localization.launch.py initial_x:=1.0 initial_yaw:=90.0
 """
 
 import os

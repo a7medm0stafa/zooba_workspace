@@ -1,218 +1,190 @@
 """
-EKF Core — Extended Kalman Filter with Bicycle Kinematic Model
-================================================================
-FILE: localization/localization/ekf_core.py
-STATUS: NEW FILE — added as part of EKF localization upgrade
-CREATED: 2026-04-24
+EKF Core — 4-State Extended Kalman Filter for 2D Vehicle Localization
+======================================================================
+FILE:    localization/localization/ekf_core.py
+STATUS:  COMPLETE REWRITE — replaces the broken 5-state EKF
+CREATED: 2026-05-17
 
-WHAT THIS FILE DOES:
-    Pure-Python/Numpy EKF implementation for 2D vehicle localization.
-    This is the math engine — no ROS dependencies, no topics.
-    Called by ekf_localization_node.py to run predict/update steps.
+PURPOSE:
+    Pure-Python/Numpy EKF engine for 2D vehicle localization.
+    No ROS dependencies — called by ekf_localization_node.py.
+    Can be unit-tested standalone.
 
-WHAT CHANGED (vs. old system):
-    - OLD: odometry_node.py used direct yaw = imu_yaw, then x += Δd·cos(yaw)
-           → open-loop dead-reckoning, no drift correction
-    - NEW: This EKF tracks 5 states including gyro bias, fusing encoder + IMU
-           optimally with Kalman gain, plus ZUPT to prevent stationary drift
+STATE VECTOR (4 × 1):
+    x[0] = x        position X in odom frame  [m]
+    x[1] = y        position Y in odom frame  [m]
+    x[2] = θ        heading / yaw             [rad]
+    x[3] = v        longitudinal velocity     [m/s]
 
-STATE VECTOR (5 × 1):
-    x[0] = x           position X in odom frame [m]
-    x[1] = y           position Y in odom frame [m]
-    x[2] = θ (theta)   heading / yaw [rad]
-    x[3] = v           longitudinal velocity [m/s]
-    x[4] = ω_bias      gyroscope Z-axis bias [rad/s]  ← KEY ADDITION
+    NOTE: Gyro bias is NOT a filter state. The Arduino firmware performs
+    static gyro-Z offset calibration at boot (200 samples). The ROS node
+    subtracts a yaw-angle offset during its own settling period.
 
-PREDICTION MODEL (bicycle kinematics):
-    x'       = x + v·cos(θ)·dt
-    y'       = y + v·sin(θ)·dt
-    θ'       = θ + (ω_gyro − ω_bias)·dt    ← bias is subtracted!
-    v'       = v                             (constant between encoder updates)
-    ω_bias'  = ω_bias                        (slow random walk)
+PREDICTION MODEL (unicycle kinematics):
+    x'  = x + v·cos(θ)·dt
+    y'  = y + v·sin(θ)·dt
+    θ'  = θ + ω_z·dt          (ω_z = bias-corrected gyroscope)
+    v'  = v                    (constant between encoder updates)
+
+PROCESS NOISE (noise-input formulation):
+    Q_d = G · diag(σ_v², σ_ω²) · Gᵀ
+    where G maps velocity/yaw-rate noise into state space.
+    This ensures position noise grows ONLY through velocity uncertainty,
+    fixing the unbounded covariance explosion of the old filter.
 
 MEASUREMENT MODELS:
-    1. Encoder velocity:   z = [v_encoder],   h(x) = [v]
-    2. Gyro rate:          z = [ω_gyro],      h(x) = [ω_bias]  (bias estimation)
-    3. IMU heading:        z = [θ_imu],       h(x) = [θ]       (low trust ~8.5°)
-    4. ZUPT (v≈0):         z = [0, 0],        h(x) = [v, 0]    (stationary lock)
+    1. Encoder velocity:  z = v_enc,  h(x) = v,  H = [0,0,0,1]
+    2. IMU heading:       z = θ_imu,  h(x) = θ,  H = [0,0,1,0]
+       (DISABLED by default — Arduino yaw is pure gyro integration,
+        so using it double-counts gyro data. Kept for future use with
+        magnetometer or GPS heading.)
+    3. ZUPT (v ≈ 0):      z = 0,      h(x) = v,  H = [0,0,0,1]
 
-COMPATIBILITY:
-    - Works with both hardware and simulation
-    - No ROS dependency — can be tested standalone with numpy
-    - Used by ekf_localization_node.py (the ROS2 wrapper)
+ALL UNITS: meters, radians, seconds. No exceptions.
 """
 
 import math
 import numpy as np
 
 
-class BicycleEKF:
-    """Extended Kalman Filter for 2D bicycle-model vehicle localization.
-
-    Tracks [x, y, θ, v, ω_bias] and fuses encoder + IMU measurements
-    to produce a drift-resistant pose estimate.
+class EKF2D:
+    """4-state EKF for 2D vehicle localization: [x, y, θ, v].
 
     Parameters
     ----------
-    process_noise : dict
-        Keys: 'x', 'y', 'yaw', 'vel', 'gyro_bias' — diagonal Q values.
-    encoder_vel_noise : float
-        Encoder velocity measurement noise (σ²).
-    gyro_rate_noise : float
-        Gyroscope angular rate measurement noise (σ²).
-    imu_yaw_noise : float
-        IMU complementary-filter heading measurement noise (σ²).
-    zupt_noise : float
-        Zero-velocity virtual measurement noise (σ²).
+    sigma_v : float
+        Process noise standard deviation for velocity [m/s].
+        Controls how much position uncertainty grows per prediction step.
+    sigma_omega : float
+        Process noise standard deviation for yaw rate [rad/s].
+        Controls how much heading uncertainty grows per prediction step.
     """
 
-    # State indices
-    IX = 0   # x position
-    IY = 1   # y position
-    ITHETA = 2  # heading
-    IV = 3   # velocity
-    IBIAS = 4   # gyro bias
+    # State indices — named constants for clarity
+    IX = 0       # x position
+    IY = 1       # y position
+    ITHETA = 2   # heading / yaw
+    IV = 3       # longitudinal velocity
 
-    N_STATES = 5
+    N_STATES = 4
 
-    def __init__(self, process_noise: dict,
-                 encoder_vel_noise: float = 0.05,
-                 gyro_rate_noise: float = 0.01,
-                 imu_yaw_noise: float = 0.15,
-                 zupt_noise: float = 0.001):
-
-        # ---- State & covariance ----
+    def __init__(self, sigma_v: float, sigma_omega: float):
+        # ---- State vector ----
         self.x = np.zeros(self.N_STATES)
-        self.P = np.eye(self.N_STATES) * 0.1
 
-        # Initial uncertainty: position known, bias unknown
-        self.P[self.IX, self.IX] = 0.01
-        self.P[self.IY, self.IY] = 0.01
-        self.P[self.ITHETA, self.ITHETA] = 0.01
-        self.P[self.IV, self.IV] = 0.1
-        self.P[self.IBIAS, self.IBIAS] = 0.01
+        # ---- Covariance matrix ----
+        self.P = np.diag([0.01, 0.01, 0.01, 0.1])
 
-        # ---- Process noise Q (continuous-time, scaled by dt in predict) ----
-        self.q_diag = np.array([
-            process_noise.get('x', 0.01),
-            process_noise.get('y', 0.01),
-            process_noise.get('yaw', 0.005),
-            process_noise.get('vel', 0.1),
-            process_noise.get('gyro_bias', 0.0001),
-        ])
+        # ---- Process noise parameters (continuous-time σ) ----
+        self._sigma_v = sigma_v
+        self._sigma_omega = sigma_omega
 
-        # ---- Measurement noise variances ----
-        self.R_encoder = np.array([[encoder_vel_noise ** 2]])
-        self.R_gyro = np.array([[gyro_rate_noise ** 2]])
-        self.R_yaw = np.array([[imu_yaw_noise ** 2]])
-        self.R_zupt = np.eye(2) * (zupt_noise ** 2)
+    # ==================== Initialization ====================
 
-    def set_state(self, x: float, y: float, theta: float,
-                  v: float = 0.0, gyro_bias: float = 0.0):
-        """Set the state vector directly (e.g. for initialization)."""
-        self.x[self.IX] = x
-        self.x[self.IY] = y
-        self.x[self.ITHETA] = theta
-        self.x[self.IV] = v
-        self.x[self.IBIAS] = gyro_bias
-
-    # ==================== Prediction ====================
-
-    def predict(self, omega_gyro: float, dt: float):
-        """EKF prediction step using bicycle kinematic model.
+    def set_initial_state(self, x: float, y: float, theta: float,
+                          v: float = 0.0):
+        """Hard-set the state vector. Resets covariance to initial values.
 
         Parameters
         ----------
-        omega_gyro : float
-            Raw gyroscope reading around Z axis [rad/s].
-            The estimated bias is subtracted internally.
+        x, y : float    Position [m].
+        theta : float   Heading [rad].
+        v : float       Velocity [m/s].
+        """
+        self.x = np.array([x, y, theta, v], dtype=float)
+        self.P = np.diag([0.01, 0.01, 0.01, 0.1])
+
+    # ==================== Prediction ====================
+
+    def predict(self, omega_z: float, dt: float):
+        """EKF prediction step using unicycle kinematic model.
+
+        Parameters
+        ----------
+        omega_z : float
+            Bias-corrected gyroscope yaw rate [rad/s].
         dt : float
             Time step [s]. Must be > 0.
         """
         if dt <= 0.0:
             return
 
-        x, y, theta, v, w_bias = self.x
+        x, y, theta, v = self.x
 
-        # Corrected yaw rate (subtract estimated bias)
-        omega_corrected = omega_gyro - w_bias
-
-        # Kinematic prediction
         cos_th = math.cos(theta)
         sin_th = math.sin(theta)
 
+        # ---- State prediction f(x, u, dt) ----
         x_new = x + v * cos_th * dt
         y_new = y + v * sin_th * dt
-        theta_new = self._normalize_angle(theta + omega_corrected * dt)
-        v_new = v  # velocity model: constant between encoder updates
-        bias_new = w_bias  # bias model: slow random walk
+        theta_new = theta + omega_z * dt
+        v_new = v  # constant velocity model
 
-        # Jacobian F = ∂f/∂x
+        # ---- Jacobian F = ∂f/∂x ----
         F = np.eye(self.N_STATES)
         F[self.IX, self.ITHETA] = -v * sin_th * dt
         F[self.IX, self.IV] = cos_th * dt
         F[self.IY, self.ITHETA] = v * cos_th * dt
         F[self.IY, self.IV] = sin_th * dt
-        F[self.ITHETA, self.IBIAS] = -dt  # ∂θ'/∂ω_bias = -dt
 
-        # Process noise Q (scaled by dt for discrete-time)
-        Q = np.diag(self.q_diag * dt)
+        # ---- Process noise Q (noise-input formulation) ----
+        # G maps [w_v, w_ω] noise into state space
+        # G = [[cos(θ)·dt,  0   ],
+        #      [sin(θ)·dt,  0   ],
+        #      [0,          dt  ],
+        #      [1,          0   ]]
+        G = np.array([
+            [cos_th * dt, 0.0],
+            [sin_th * dt, 0.0],
+            [0.0,         dt],
+            [1.0,         0.0],
+        ])
+        Q_c = np.diag([self._sigma_v ** 2, self._sigma_omega ** 2])
+        Q = G @ Q_c @ G.T
 
-        # Update state and covariance
-        self.x = np.array([x_new, y_new, theta_new, v_new, bias_new])
+        # ---- Covariance prediction ----
         self.P = F @ self.P @ F.T + Q
 
-        # Enforce covariance symmetry (numerical stability)
+        # ---- Update state ----
+        self.x = np.array([x_new, y_new, self._normalize_angle(theta_new),
+                           v_new])
+
+        # Enforce symmetry (numerical stability)
         self.P = 0.5 * (self.P + self.P.T)
 
     # ==================== Measurement Updates ====================
 
-    def update_velocity(self, v_measured: float):
+    def update_velocity(self, v_measured: float, R: float):
         """Encoder velocity measurement update.
 
         Parameters
         ----------
         v_measured : float
             Measured longitudinal velocity from encoder [m/s].
+        R : float
+            Measurement noise variance (σ²) [m²/s²].
         """
-        # Measurement model: z = H·x, where H selects v
         H = np.zeros((1, self.N_STATES))
         H[0, self.IV] = 1.0
 
         z = np.array([v_measured])
         z_pred = np.array([self.x[self.IV]])
 
-        self._ekf_update(z, z_pred, H, self.R_encoder)
+        self._joseph_update(z, z_pred, H, np.array([[R]]))
 
-    def update_gyro(self, omega_measured: float):
-        """Gyroscope angular rate measurement update.
+    def update_heading(self, theta_measured: float, R: float):
+        """Absolute heading measurement update (angle-wrapped).
 
-        This update helps the EKF estimate the gyro bias by constraining
-        the bias state based on the measured gyro reading.
-
-        Parameters
-        ----------
-        omega_measured : float
-            Raw gyroscope Z-axis reading [rad/s].
-        """
-        H = np.zeros((1, self.N_STATES))
-        H[0, self.IBIAS] = 1.0
-
-        z = np.array([omega_measured])
-        z_pred = np.array([self.x[self.IBIAS]])
-
-        self._ekf_update(z, z_pred, H, self.R_gyro)
-
-    def update_heading(self, theta_measured: float):
-        """Absolute heading measurement from IMU complementary filter.
-
-        Used with HIGH measurement noise (low trust) as a soft anchor
-        to prevent long-term heading divergence.
+        NOTE: DISABLED by default in the node. The Arduino yaw is pure
+        gyro integration — using it double-counts gyro data. Enable only
+        if an absolute heading source (magnetometer, GPS) is available.
 
         Parameters
         ----------
         theta_measured : float
-            Heading from IMU complementary filter [rad].
+            Heading measurement [rad].
+        R : float
+            Measurement noise variance (σ²) [rad²].
         """
         H = np.zeros((1, self.N_STATES))
         H[0, self.ITHETA] = 1.0
@@ -220,63 +192,74 @@ class BicycleEKF:
         z = np.array([theta_measured])
         z_pred = np.array([self.x[self.ITHETA]])
 
-        # Handle angle wrapping in innovation
-        innovation = np.array([self._normalize_angle(z[0] - z_pred[0])])
+        # Angle-wrapped innovation
+        innovation = np.array([
+            self._normalize_angle(z[0] - z_pred[0])
+        ])
 
-        S = H @ self.P @ H.T + self.R_yaw
-        K = self.P @ H.T @ np.linalg.inv(S)
-
-        self.x = self.x + (K @ innovation).flatten()
-        self.x[self.ITHETA] = self._normalize_angle(self.x[self.ITHETA])
-        I_KH = np.eye(self.N_STATES) - K @ H
-        self.P = I_KH @ self.P @ I_KH.T + K @ self.R_yaw @ K.T
-        self.P = 0.5 * (self.P + self.P.T)
-
-    def zupt(self):
-        """Zero-Velocity Update (ZUPT).
-
-        When the vehicle is known to be stationary, inject a virtual
-        measurement that v = 0 and yaw_rate = 0. This prevents position
-        drift while stopped — the primary fix for the lateral drift problem.
-        """
-        H = np.zeros((2, self.N_STATES))
-        H[0, self.IV] = 1.0      # velocity = 0
-        H[1, self.ITHETA] = 1.0  # constrain yaw to prevent drift
-
-        z = np.array([0.0, self.x[self.ITHETA]])
-        z_pred = np.array([self.x[self.IV], self.x[self.ITHETA]])
-
-        self._ekf_update(z, z_pred, H, self.R_zupt)
-
-    # ==================== Core EKF Math ====================
-
-    def _ekf_update(self, z: np.ndarray, z_pred: np.ndarray,
-                    H: np.ndarray, R: np.ndarray):
-        """Generic EKF measurement update (Joseph form for stability).
-
-        Parameters
-        ----------
-        z : array
-            Measurement vector.
-        z_pred : array
-            Predicted measurement h(x).
-        H : array
-            Measurement Jacobian.
-        R : array
-            Measurement noise covariance.
-        """
-        innovation = z - z_pred
-        S = H @ self.P @ H.T + R
+        S = H @ self.P @ H.T + np.array([[R]])
         try:
             K = self.P @ H.T @ np.linalg.inv(S)
         except np.linalg.LinAlgError:
-            # Singular S — skip this update
-            return
+            return  # singular — skip
 
         self.x = self.x + (K @ innovation).flatten()
         self.x[self.ITHETA] = self._normalize_angle(self.x[self.ITHETA])
 
-        # Joseph form: P = (I - KH)P(I - KH)' + KRK'
+        # Joseph form
+        I_KH = np.eye(self.N_STATES) - K @ H
+        R_mat = np.array([[R]])
+        self.P = I_KH @ self.P @ I_KH.T + K @ R_mat @ K.T
+        self.P = 0.5 * (self.P + self.P.T)
+
+    def zupt(self, R: float):
+        """Zero-Velocity Update (ZUPT).
+
+        Injects a virtual measurement that v = 0.
+        Drives P_vv → R, which via the noise-input Q formulation
+        indirectly bounds position covariance growth.
+
+        Parameters
+        ----------
+        R : float
+            ZUPT measurement noise variance (σ²) [m²/s²].
+            Use a very small value (e.g. 1e-6) for strong clamping.
+        """
+        H = np.zeros((1, self.N_STATES))
+        H[0, self.IV] = 1.0
+
+        z = np.array([0.0])
+        z_pred = np.array([self.x[self.IV]])
+
+        self._joseph_update(z, z_pred, H, np.array([[R]]))
+
+    # ==================== Core EKF Math ====================
+
+    def _joseph_update(self, z: np.ndarray, z_pred: np.ndarray,
+                       H: np.ndarray, R: np.ndarray):
+        """Generic EKF measurement update using Joseph form.
+
+        Joseph form: P = (I - KH) P (I - KH)^T + K R K^T
+        More numerically stable than the standard form P = (I - KH) P.
+
+        Parameters
+        ----------
+        z : array       Measurement vector.
+        z_pred : array  Predicted measurement h(x).
+        H : array       Measurement Jacobian.
+        R : array       Measurement noise covariance.
+        """
+        innovation = z - z_pred
+        S = H @ self.P @ H.T + R
+
+        try:
+            K = self.P @ H.T @ np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            return  # singular S — skip this update
+
+        self.x = self.x + (K @ innovation).flatten()
+        self.x[self.ITHETA] = self._normalize_angle(self.x[self.ITHETA])
+
         I_KH = np.eye(self.N_STATES) - K @ H
         self.P = I_KH @ self.P @ I_KH.T + K @ R @ K.T
         self.P = 0.5 * (self.P + self.P.T)
@@ -286,35 +269,31 @@ class BicycleEKF:
     @staticmethod
     def _normalize_angle(angle: float) -> float:
         """Normalize angle to [-π, π]."""
-        while angle > math.pi:
-            angle -= 2.0 * math.pi
-        while angle < -math.pi:
-            angle += 2.0 * math.pi
-        return angle
+        return (angle + math.pi) % (2.0 * math.pi) - math.pi
 
     # ==================== Accessors ====================
 
     @property
     def position_x(self) -> float:
+        """X position [m]."""
         return float(self.x[self.IX])
 
     @property
     def position_y(self) -> float:
+        """Y position [m]."""
         return float(self.x[self.IY])
 
     @property
     def heading(self) -> float:
+        """Heading [rad]."""
         return float(self.x[self.ITHETA])
 
     @property
     def velocity(self) -> float:
+        """Longitudinal velocity [m/s]."""
         return float(self.x[self.IV])
 
     @property
-    def gyro_bias(self) -> float:
-        return float(self.x[self.IBIAS])
-
-    @property
     def covariance_diagonal(self) -> np.ndarray:
-        """Return the diagonal of the covariance matrix (uncertainties²)."""
+        """Diagonal of P (uncertainties²)."""
         return np.diag(self.P)

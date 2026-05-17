@@ -1,64 +1,30 @@
 """
 EKF Localization Node — Fused Encoder + IMU State Estimation
 ==============================================================
-FILE: localization/localization/ekf_localization_node.py
-STATUS: NEW FILE — replaces the old odometry_node.py (dead-reckoning)
-CREATED: 2026-04-24
+FILE:    localization/localization/ekf_localization_node.py
+STATUS:  COMPLETE REWRITE — replaces the broken 5-state EKF node
+CREATED: 2026-05-17
 
-WHAT THIS FILE DOES:
-    This is the main ROS2 localization node. It runs an Extended Kalman
-    Filter (EKF) that fuses encoder and IMU data to produce a stable,
-    drift-resistant vehicle pose estimate.
+PURPOSE:
+    ROS2 node that runs a 4-state EKF fusing encoder velocity and
+    IMU gyroscope data to produce a drift-resistant vehicle pose.
 
-WHAT CHANGED (vs. old system):
-    - OLD: mid_level_controller/odometry_node.py — direct yaw = IMU, x += Δd·cos(yaw)
-           Dead-reckoning with NO drift correction. Yaw drift → y-position drift.
-    - NEW: EKF with 5-state model [x, y, θ, v, ω_bias]
-           → Gyro bias estimation removes yaw drift
-           → Zero-Velocity Update (ZUPT) locks position when stopped
-           → IMU heading used as soft anchor (low trust) for long-term stability
+ARCHITECTURE:
+    - Prediction (timer-driven, 50 Hz): propagates state using gyro ω_z
+    - Encoder update (event-driven): velocity measurement on callback
+    - ZUPT (conditional): when encoder reports near-zero velocity
+    - Heading update (DISABLED by default): Arduino yaw is pure gyro
+      integration — double-counts gyro data. Gated behind parameter.
 
-MODES OF OPERATION:
-    1. HARDWARE MODE (source='hardware'):
-       - Subscribes to: /vehicle/feedback (VehicleFeedback) — encoder ticks + velocity
-                         /vehicle/imu      (ImuData)          — gyro_z + comp.filter yaw
-       - This is what runs on the real car (Raspberry Pi + Arduino)
-       - Usage: ros2 launch localization ekf_localization.launch.py source:=hardware
-                ros2 launch high_level_controller closed_loop_hw.launch.py
-
-    2. SIMULATION MODE (source='simulation'):
-       - Subscribes to: /joint_states (JointState) — Gazebo wheel velocities + steering
-       - Compatible with the gazebo_ackermann_steering_vehicle model
-       - Gazebo joint names used:
-            rear_left_wheel_joint      → angular velocity → linear velocity
-            rear_right_wheel_joint     → angular velocity → linear velocity
-            front_left_steering_joint  → steering position → yaw rate (kinematics)
-       - Usage: ros2 launch localization ekf_localization.launch.py source:=simulation
-                ros2 launch zooba_simulation closed_loop_sim.launch.py
+MODES:
+    1. HARDWARE: subscribes to /vehicle/feedback + /vehicle/imu
+    2. SIMULATION: subscribes to /joint_states (Gazebo Ackermann model)
 
 PUBLISHES:
-    /vehicle/state      (vehicle_interfaces/VehicleState)  — fused state estimate
-    TF: odom → base_link                                    — transform for RViz
+    /vehicle/state  (VehicleState)  — fused state estimate
+    TF: odom → base_link            — transform for RViz
 
-PARAMETERS (all configurable via YAML or launch file):
-    source, wheelbase, wheel_radius, encoder_cpr, publish_rate,
-    process_noise_*, encoder_velocity_noise, gyro_rate_noise,
-    imu_yaw_noise, zupt_velocity_threshold, zupt_noise,
-    imu_settle_time, initial_x, initial_y, initial_yaw
-
-GAZEBO ACKERMANN COMPATIBILITY:
-    ✓ Joint names match vehicle.xacro: rear_left_wheel_joint, rear_right_wheel_joint,
-      front_left_steering_joint, front_right_steering_joint
-    ✓ Wheel velocity → linear velocity: v = avg(ω_L, ω_R) × wheel_radius
-    ✓ Steering → yaw rate: ω = v × tan(δ) / wheelbase (bicycle model)
-    ✓ sim_bridge_node publishes /vehicle/feedback with simulated encoder ticks
-    ✓ TF broadcast: odom → base_link for RViz visualization
-
-ROLLBACK:
-    To revert to old dead-reckoning, change the launch files:
-      package='localization', executable='ekf_localization_node'
-    back to:
-      package='mid_level_controller', executable='odometry_node'
+ALL INTERNAL UNITS: meters, radians, seconds.
 """
 
 import math
@@ -71,7 +37,7 @@ from sensor_msgs.msg import JointState
 from geometry_msgs.msg import TransformStamped
 import tf2_ros
 
-from localization.ekf_core import BicycleEKF
+from localization.ekf_core import EKF2D
 
 
 class EKFLocalizationNode(Node):
@@ -82,38 +48,37 @@ class EKFLocalizationNode(Node):
         # ================================================================
         # Parameters
         # ================================================================
-        self.declare_parameter('source', 'hardware')           # "hardware" or "simulation"
-        self.declare_parameter('wheelbase', 0.265)              # m
-        self.declare_parameter('wheel_radius', 0.033)          # m
-        self.declare_parameter('encoder_cpr', 5471)            # counts per revolution
-        self.declare_parameter('publish_rate', 50.0)           # Hz
+        self.declare_parameter('source', 'hardware')
+        self.declare_parameter('wheelbase', 0.265)
+        self.declare_parameter('wheel_radius', 0.033)
+        self.declare_parameter('encoder_cpr', 5471)
+        self.declare_parameter('gear_ratio', 124.333)
+        self.declare_parameter('publish_rate', 50.0)
         self.declare_parameter('feedback_topic', '/vehicle/feedback')
         self.declare_parameter('imu_topic', '/vehicle/imu')
         self.declare_parameter('state_topic', '/vehicle/state')
 
-        # Process noise (Q diagonal)
-        self.declare_parameter('process_noise_x', 0.01)
-        self.declare_parameter('process_noise_y', 0.01)
-        self.declare_parameter('process_noise_yaw', 0.005)
-        self.declare_parameter('process_noise_vel', 0.1)
-        self.declare_parameter('process_noise_gyro_bias', 0.0001)
+        # Process noise (continuous-time standard deviations)
+        self.declare_parameter('sigma_velocity', 0.1)
+        self.declare_parameter('sigma_yaw_rate', 0.02)
 
-        # Measurement noise
-        self.declare_parameter('encoder_velocity_noise', 0.05)
-        self.declare_parameter('gyro_rate_noise', 0.01)
-        self.declare_parameter('imu_yaw_noise', 0.15)          # ~8.5° — low trust
+        # Measurement noise (standard deviations)
+        self.declare_parameter('sigma_encoder', 0.05)
+        self.declare_parameter('sigma_imu_heading', 0.20)
 
         # ZUPT
-        self.declare_parameter('zupt_velocity_threshold', 0.02)  # m/s
-        self.declare_parameter('zupt_noise', 0.001)
+        self.declare_parameter('zupt_velocity_threshold', 0.02)
+        self.declare_parameter('sigma_zupt', 0.001)
 
-        # IMU settling
-        self.declare_parameter('imu_settle_time', 10.0)         # seconds
+        # IMU
+        self.declare_parameter('imu_settle_time', 5.0)
+        self.declare_parameter('use_imu_heading', False)
+        self.declare_parameter('heading_update_divisor', 10)
 
         # Initial pose
         self.declare_parameter('initial_x', 0.0)
         self.declare_parameter('initial_y', 0.0)
-        self.declare_parameter('initial_yaw', 0.0)             # degrees
+        self.declare_parameter('initial_yaw', 0.0)  # degrees (user convenience)
 
         # ================================================================
         # Read parameters
@@ -129,9 +94,18 @@ class EKFLocalizationNode(Node):
 
         self.zupt_velocity_threshold = self.get_parameter('zupt_velocity_threshold').value
         self.imu_settle_time = self.get_parameter('imu_settle_time').value
-        initial_x = self.get_parameter('initial_x').value
-        initial_y = self.get_parameter('initial_y').value
-        initial_yaw_deg = self.get_parameter('initial_yaw').value
+        self.use_imu_heading = self.get_parameter('use_imu_heading').value
+        self.heading_update_divisor = self.get_parameter('heading_update_divisor').value
+
+        sigma_v = self.get_parameter('sigma_velocity').value
+        sigma_omega = self.get_parameter('sigma_yaw_rate').value
+        self.R_encoder = self.get_parameter('sigma_encoder').value ** 2
+        self.R_heading = self.get_parameter('sigma_imu_heading').value ** 2
+        self.R_zupt = self.get_parameter('sigma_zupt').value ** 2
+
+        initial_x = float(self.get_parameter('initial_x').value)
+        initial_y = float(self.get_parameter('initial_y').value)
+        initial_yaw_deg = float(self.get_parameter('initial_yaw').value)
 
         # ================================================================
         # Precompute
@@ -142,27 +116,11 @@ class EKFLocalizationNode(Node):
         # ================================================================
         # Initialize EKF
         # ================================================================
-        process_noise = {
-            'x': self.get_parameter('process_noise_x').value,
-            'y': self.get_parameter('process_noise_y').value,
-            'yaw': self.get_parameter('process_noise_yaw').value,
-            'vel': self.get_parameter('process_noise_vel').value,
-            'gyro_bias': self.get_parameter('process_noise_gyro_bias').value,
-        }
-
-        self.ekf = BicycleEKF(
-            process_noise=process_noise,
-            encoder_vel_noise=self.get_parameter('encoder_velocity_noise').value,
-            gyro_rate_noise=self.get_parameter('gyro_rate_noise').value,
-            imu_yaw_noise=self.get_parameter('imu_yaw_noise').value,
-            zupt_noise=self.get_parameter('zupt_noise').value,
-        )
-
-        # Set initial pose
-        self.ekf.set_state(
-            x=float(initial_x),
-            y=float(initial_y),
-            theta=math.radians(float(initial_yaw_deg)),
+        self.ekf = EKF2D(sigma_v=sigma_v, sigma_omega=sigma_omega)
+        self.ekf.set_initial_state(
+            x=initial_x,
+            y=initial_y,
+            theta=math.radians(initial_yaw_deg),
         )
 
         # ================================================================
@@ -172,13 +130,11 @@ class EKFLocalizationNode(Node):
         self.last_ticks = None
         self.last_encoder_velocity = 0.0
 
-        # IMU
+        # IMU — all stored in SI units (rad/s, rad)
         self.imu_initialized = False
-        self.imu_yaw_offset = 0.0
-        self.imu_gyro_sum = 0.0
-        self.imu_gyro_count = 0
-        self.latest_gyro_z = 0.0         # rad/s
-        self.latest_imu_yaw_rad = None   # rad (after offset correction)
+        self.imu_yaw_offset_rad = 0.0
+        self.latest_gyro_z = 0.0          # rad/s (bias-corrected by Arduino)
+        self.latest_imu_yaw_rad = None    # rad (after offset correction)
         self.start_time = None
 
         # Simulation
@@ -187,11 +143,10 @@ class EKFLocalizationNode(Node):
 
         # Timing
         self.last_predict_time = self.get_clock().now()
+        self.timer_tick_count = 0
 
-        # Yaw rate (for VehicleState output)
+        # Output fields
         self.current_yaw_rate = 0.0
-
-        # Steering angle (for VehicleState output)
         self.current_steering_angle = 0.0
 
         # ================================================================
@@ -210,18 +165,15 @@ class EKFLocalizationNode(Node):
             self.imu_sub = self.create_subscription(
                 ImuData, imu_topic,
                 self._imu_callback, 10)
-            # Subscribe to commanded steering for Ackermann yaw rate
             self.cmd_sub = self.create_subscription(
                 VehicleCmd, '/vehicle/cmd',
                 self._cmd_callback, 10)
         else:
-            # SIMULATION MODE: subscribe to Gazebo /joint_states
-            # Joint names from vehicle.xacro:
-            #   rear_left_wheel_joint, rear_right_wheel_joint → wheel ω → velocity
-            #   front_left_steering_joint → steering angle δ → yaw rate
             self.joint_sub = self.create_subscription(
                 JointState, '/joint_states',
                 self._joint_state_callback, 10)
+            # Simulation doesn't need IMU settling
+            self.imu_initialized = True
 
         # ================================================================
         # Timer — prediction + publish at fixed rate
@@ -231,60 +183,52 @@ class EKFLocalizationNode(Node):
         # ================================================================
         # Startup log
         # ================================================================
-        self.get_logger().info('=' * 58)
-        self.get_logger().info('EKF Localization Node Started')
-        self.get_logger().info(f'  Source           : {self.source}')
-        self.get_logger().info(f'  Wheelbase        : {self.wheelbase:.3f} m')
-        self.get_logger().info(f'  Wheel radius     : {self.wheel_radius:.4f} m')
-        self.get_logger().info(f'  Encoder CPR      : {self.encoder_cpr}')
-        self.get_logger().info(f'  m/tick           : {self.meters_per_tick:.6f}')
-        self.get_logger().info(f'  Publish rate     : {publish_rate:.0f} Hz')
-        self.get_logger().info(f'  ZUPT threshold   : {self.zupt_velocity_threshold:.3f} m/s')
-        self.get_logger().info(f'  IMU settle time  : {self.imu_settle_time:.1f} s')
-        self.get_logger().info(f'  Initial pose     : ({initial_x:.2f}, {initial_y:.2f}) '
+        self.get_logger().info('=' * 60)
+        self.get_logger().info('EKF Localization Node v2.0 (4-state rewrite)')
+        self.get_logger().info(f'  Source            : {self.source}')
+        self.get_logger().info(f'  Wheelbase         : {self.wheelbase:.3f} m')
+        self.get_logger().info(f'  Wheel radius      : {self.wheel_radius:.4f} m')
+        self.get_logger().info(f'  Encoder CPR       : {self.encoder_cpr}')
+        self.get_logger().info(f'  m/tick            : {self.meters_per_tick:.6f}')
+        self.get_logger().info(f'  Publish rate      : {publish_rate:.0f} Hz')
+        self.get_logger().info(f'  σ_velocity        : {sigma_v}')
+        self.get_logger().info(f'  σ_yaw_rate        : {sigma_omega}')
+        self.get_logger().info(f'  σ_encoder         : {math.sqrt(self.R_encoder):.4f}')
+        self.get_logger().info(f'  ZUPT threshold    : {self.zupt_velocity_threshold:.3f} m/s')
+        self.get_logger().info(f'  IMU heading update: {"ENABLED" if self.use_imu_heading else "DISABLED"}')
+        self.get_logger().info(f'  IMU settle time   : {self.imu_settle_time:.1f} s')
+        self.get_logger().info(f'  Initial pose      : ({initial_x:.2f}, {initial_y:.2f}) '
                                f'yaw={initial_yaw_deg:.1f}°')
-        self.get_logger().info(f'  Output topic     : {state_topic}')
-        if self.source == 'simulation':
-            self.get_logger().info(f'  Gazebo joints    : rear_*_wheel_joint, front_left_steering_joint')
-        self.get_logger().info('=' * 58)
+        self.get_logger().info(f'  Output topic      : {state_topic}')
+        self.get_logger().info('=' * 60)
 
     # ================================================================
     # Hardware Callbacks
     # ================================================================
 
     def _feedback_callback(self, msg: VehicleFeedback):
-        """Process encoder feedback: velocity + distance update.
-        
+        """Process encoder feedback: velocity measurement update.
+
         Called in HARDWARE mode only.
-        Source topic: /vehicle/feedback (VehicleFeedback)
-        From: low_level_controller_node → Arduino encoder
+        Source: /vehicle/feedback (VehicleFeedback) from LLC → Arduino encoder.
         """
-        current_ticks = msg.encoder_ticks
         self.last_encoder_velocity = msg.actual_velocity
 
-        # ---- Velocity measurement update ----
-        self.ekf.update_velocity(msg.actual_velocity)
+        # Event-driven velocity update — happens immediately on arrival
+        if self.imu_initialized:
+            self.ekf.update_velocity(msg.actual_velocity, self.R_encoder)
 
-        # ---- Distance-based position correction ----
-        if self.last_ticks is not None:
-            delta_ticks = current_ticks - self.last_ticks
-            if abs(delta_ticks) > 0:
-                # Additional velocity cross-check from ticks
-                # (provides redundancy with actual_velocity)
-                pass  # Already handled by velocity update
-
-        self.last_ticks = current_ticks
+        self.last_ticks = msg.encoder_ticks
 
     def _imu_callback(self, msg: ImuData):
-        """Process IMU data: gyro rate + heading update.
-        
+        """Process IMU data: store gyro_z and heading.
+
         Called in HARDWARE mode only.
-        Source topic: /vehicle/imu (ImuData)
-        From: low_level_controller_node → Arduino MPU6050
-        
-        IMU fields used:
-            msg.gyro_z  → angular rate [rad/s] — used in EKF prediction
-            msg.yaw     → complementary filter heading [degrees] — soft anchor
+        Source: /vehicle/imu (ImuData) from LLC → Arduino MPU6050.
+
+        Units from firmware:
+            msg.gyro_z  → rad/s (already bias-corrected by Arduino)
+            msg.yaw     → degrees (pure gyro integration on Arduino)
         """
         now = self.get_clock().now()
 
@@ -296,46 +240,35 @@ class EKFLocalizationNode(Node):
 
         if not self.imu_initialized:
             if elapsed < self.imu_settle_time:
-                # Still settling — track raw yaw for offset
-                self.imu_yaw_offset = msg.yaw
+                # Still settling — track raw yaw for offset, store latest gyro
+                self.imu_yaw_offset_rad = math.radians(msg.yaw)
                 self.latest_gyro_z = msg.gyro_z
-                self.imu_gyro_sum += msg.gyro_z
-                self.imu_gyro_count += 1
                 return
 
-            # Capture zero-offset after settling
-            self.imu_yaw_offset = msg.yaw
-            initial_bias = self.imu_gyro_sum / max(1, self.imu_gyro_count)
-            self.ekf.x[self.ekf.IBIAS] = initial_bias
+            # Settling complete — capture yaw offset
+            self.imu_yaw_offset_rad = math.radians(msg.yaw)
             self.imu_initialized = True
             self.get_logger().info(
-                f'IMU initialized: yaw_offset={self.imu_yaw_offset:.2f}°, '
-                f'gyro_bias={math.degrees(initial_bias):.3f}°/s '
+                f'IMU initialized: yaw_offset={math.degrees(self.imu_yaw_offset_rad):.2f}° '
                 f'(after {self.imu_settle_time:.1f}s settling)')
 
         # ---- Store latest gyro reading (used in prediction) ----
-        self.latest_gyro_z = msg.gyro_z  # rad/s
+        # Already in rad/s from firmware, already bias-corrected by Arduino
+        self.latest_gyro_z = msg.gyro_z
 
-        # ---- Yaw rate for output ----
+        # ---- Yaw rate for VehicleState output ----
         self.current_yaw_rate = msg.gyro_z
 
-        # ---- Compute corrected IMU heading ----
-        corrected_yaw_deg = msg.yaw - self.imu_yaw_offset
-        corrected_yaw_rad = math.radians(corrected_yaw_deg)
-        self.latest_imu_yaw_rad = self._normalize_angle(corrected_yaw_rad)
-
-        # ---- Heading measurement update (low trust, soft anchor) ----
-        # Re-enabled to prevent permanent heading drift after lane changes.
-        # The Stanley gains have been fixed, so this shouldn't cause premature straightening anymore.
-        self.ekf.update_heading(self.latest_imu_yaw_rad)
+        # ---- Compute corrected IMU heading (single deg→rad conversion) ----
+        raw_yaw_rad = math.radians(msg.yaw)
+        corrected_yaw_rad = raw_yaw_rad - self.imu_yaw_offset_rad
+        self.latest_imu_yaw_rad = EKF2D._normalize_angle(corrected_yaw_rad)
 
     def _cmd_callback(self, msg: VehicleCmd):
-        """Capture the commanded steering angle from /vehicle/cmd.
+        """Capture commanded steering angle from /vehicle/cmd.
 
         Called in HARDWARE mode only.
-        msg.heading is the steering angle in degrees.
-        This populates VehicleState.steering_angle and enables
-        Ackermann-based yaw rate prediction.
+        msg.heading is in degrees — convert to radians at input boundary.
         """
         self.current_steering_angle = math.radians(msg.heading)
 
@@ -345,22 +278,14 @@ class EKFLocalizationNode(Node):
 
     def _joint_state_callback(self, msg: JointState):
         """Extract velocity and steering from Gazebo joint states.
-        
+
         Called in SIMULATION mode only.
-        Source topic: /joint_states (JointState)
-        From: Gazebo gz-sim-joint-state-publisher-system plugin
-        
-        Gazebo Ackermann model joint names (from vehicle.xacro):
-            rear_left_wheel_joint       → velocity[i] = angular velocity [rad/s]
-            rear_right_wheel_joint      → velocity[i] = angular velocity [rad/s]
-            front_left_steering_joint   → position[i] = steering angle [rad]
-            front_right_steering_joint  → position[i] = steering angle [rad]
-        
-        Velocity calculation:
-            v = avg(ω_left, ω_right) × wheel_radius
-        
-        Yaw rate calculation (bicycle model):
-            ω = v × tan(δ) / wheelbase
+        Source: /joint_states (JointState) from Gazebo.
+
+        Joint names (from vehicle.xacro):
+            rear_left_wheel_joint       → velocity = angular vel [rad/s]
+            rear_right_wheel_joint      → velocity = angular vel [rad/s]
+            front_left_steering_joint   → position = steering angle [rad]
         """
         try:
             rear_left_idx = None
@@ -379,19 +304,20 @@ class EKFLocalizationNode(Node):
                 omega_l = msg.velocity[rear_left_idx]
                 omega_r = msg.velocity[rear_right_idx]
                 self.sim_velocity = ((omega_l + omega_r) / 2.0) * self.wheel_radius
+                self.last_encoder_velocity = self.sim_velocity
 
-                # Update EKF with velocity measurement
-                self.ekf.update_velocity(self.sim_velocity)
+                # Event-driven velocity update
+                self.ekf.update_velocity(self.sim_velocity, self.R_encoder)
 
             if front_left_steer_idx is not None:
                 self.sim_steering_angle = msg.position[front_left_steer_idx]
                 self.current_steering_angle = self.sim_steering_angle
 
-                # Compute yaw rate from Ackermann steering kinematics
-                # ω = v · tan(δ) / L  (bicycle model approximation)
+                # Compute yaw rate from Ackermann kinematics: ω = v·tan(δ)/L
                 if abs(self.sim_steering_angle) > 1e-4 and abs(self.sim_velocity) > 0.01:
-                    turning_radius = self.wheelbase / math.tan(self.sim_steering_angle)
-                    self.latest_gyro_z = self.sim_velocity / turning_radius
+                    self.latest_gyro_z = (self.sim_velocity
+                                          * math.tan(self.sim_steering_angle)
+                                          / self.wheelbase)
                     self.current_yaw_rate = self.latest_gyro_z
                 else:
                     self.latest_gyro_z = 0.0
@@ -415,9 +341,7 @@ class EKFLocalizationNode(Node):
         if dt <= 0.0 or dt > 1.0:
             dt = 0.02  # fallback to 50 Hz
 
-        # ---- Wait for IMU to settle before running EKF ----
-        # During settling, publish zero state so controllers don't drive
-        # the car before heading calibration is complete.
+        # ---- Wait for IMU to settle ----
         if not self.imu_initialized:
             state = VehicleState()
             state.header.stamp = now.to_msg()
@@ -431,31 +355,24 @@ class EKFLocalizationNode(Node):
             self.state_pub.publish(state)
             return
 
-        # ---- Compute Ackermann yaw rate from commanded steering ----
-        # ω_ackermann = v · tan(δ) / L  (bicycle model)
-        # This provides a feed-forward yaw rate estimate independent of the gyro.
-        if abs(self.current_steering_angle) > 1e-4 and abs(self.ekf.velocity) > 0.01:
-            ackermann_yaw_rate = self.ekf.velocity * math.tan(self.current_steering_angle) / self.wheelbase
-            self.current_yaw_rate = ackermann_yaw_rate
-        else:
-            self.current_yaw_rate = self.latest_gyro_z
+        self.timer_tick_count += 1
 
         # ---- EKF Prediction step ----
         self.ekf.predict(self.latest_gyro_z, dt)
 
         # ---- Zero-Velocity Update (ZUPT) ----
-        # When robot is stationary, inject v=0 virtual measurement
-        # This is the KEY fix for lateral drift when stopped
-        if abs(self.last_encoder_velocity) < self.zupt_velocity_threshold:
-            if self.source == 'hardware':
-                self.ekf.zupt()
-            elif abs(self.sim_velocity) < self.zupt_velocity_threshold:
-                self.ekf.zupt()
+        if self.source == 'hardware':
+            if abs(self.last_encoder_velocity) < self.zupt_velocity_threshold:
+                self.ekf.zupt(self.R_zupt)
+        else:
+            if abs(self.sim_velocity) < self.zupt_velocity_threshold:
+                self.ekf.zupt(self.R_zupt)
 
-        # ---- Gyro bias estimation (always, not just ZUPT) ----
-        # Moved outside ZUPT block so bias tracks continuously while driving.
-        # Without this, bias freezes once the car starts moving → yaw drift.
-        self.ekf.update_gyro(self.latest_gyro_z)
+        # ---- IMU heading update (DISABLED by default) ----
+        if (self.use_imu_heading
+                and self.latest_imu_yaw_rad is not None
+                and self.timer_tick_count % self.heading_update_divisor == 0):
+            self.ekf.update_heading(self.latest_imu_yaw_rad, self.R_heading)
 
         # ---- Publish VehicleState ----
         state = VehicleState()
@@ -478,7 +395,6 @@ class EKFLocalizationNode(Node):
         t.transform.translation.y = self.ekf.position_y
         t.transform.translation.z = 0.0
 
-        # Yaw → quaternion
         cy = math.cos(self.ekf.heading * 0.5)
         sy = math.sin(self.ekf.heading * 0.5)
         t.transform.rotation.x = 0.0
@@ -487,11 +403,11 @@ class EKFLocalizationNode(Node):
         t.transform.rotation.w = cy
         self.tf_broadcaster.sendTransform(t)
 
-        # ---- Diagnostic log (throttled) ----
+        # ---- Diagnostic log (throttled to 1 Hz) ----
         cov = self.ekf.covariance_diagonal
-        imu_yaw_deg = math.degrees(self.latest_imu_yaw_rad) if self.latest_imu_yaw_rad is not None else 0.0
+        imu_yaw_deg = (math.degrees(self.latest_imu_yaw_rad)
+                       if self.latest_imu_yaw_rad is not None else 0.0)
 
-        # RAW SENSORS: what the hardware is reporting
         self.get_logger().info(
             f'[RAW ] gyro_z={math.degrees(self.latest_gyro_z):.3f}°/s '
             f'imu_yaw={imu_yaw_deg:.2f}° '
@@ -500,28 +416,15 @@ class EKFLocalizationNode(Node):
             throttle_duration_sec=1.0
         )
 
-        # EKF OUTPUT: what the filter produces after fusion
         self.get_logger().info(
             f'[EKF ] pos=({self.ekf.position_x:.3f},{self.ekf.position_y:.3f}) '
             f'yaw={math.degrees(self.ekf.heading):.2f}° '
             f'v={self.ekf.velocity:.3f} '
-            f'bias={math.degrees(self.ekf.gyro_bias):.4f}°/s '
-            f'σ=({math.sqrt(cov[0]):.3f},{math.sqrt(cov[1]):.3f},{math.sqrt(cov[2]):.4f})',
+            f'σ=({math.sqrt(max(0, cov[0])):.4f},'
+            f'{math.sqrt(max(0, cov[1])):.4f},'
+            f'{math.sqrt(max(0, cov[2])):.4f})',
             throttle_duration_sec=1.0
         )
-
-    # ================================================================
-    # Utilities
-    # ================================================================
-
-    @staticmethod
-    def _normalize_angle(angle: float) -> float:
-        """Normalize angle to [-π, π]."""
-        while angle > math.pi:
-            angle -= 2.0 * math.pi
-        while angle < -math.pi:
-            angle += 2.0 * math.pi
-        return angle
 
 
 def main(args=None):

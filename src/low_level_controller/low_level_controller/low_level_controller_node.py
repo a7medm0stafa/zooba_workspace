@@ -211,6 +211,8 @@ class LowLevelControllerNode(Node):
             actual_velocity = (actual_rpm * self.wheel_circumference) / 60.0
 
             fb_msg = VehicleFeedback()
+            fb_msg.header.stamp = self.get_clock().now().to_msg()
+            fb_msg.header.frame_id = 'base_link'
             fb_msg.actual_velocity = actual_velocity
             fb_msg.actual_rpm = actual_rpm
             fb_msg.encoder_ticks = encoder_ticks

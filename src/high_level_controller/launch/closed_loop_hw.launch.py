@@ -101,7 +101,7 @@ def generate_launch_description():
         }],
     )
 
-    # ---- EKF Localization node ----
+    # ---- EKF Localization node (v2.0 — 4-state filter) ----
     ekf_node = Node(
         package='localization',
         executable='ekf_localization_node',
@@ -115,6 +115,7 @@ def generate_launch_description():
                 'wheelbase': 0.265,
                 'wheel_radius': 0.033,
                 'encoder_cpr': 5471,
+                'gear_ratio': 124.333,
                 'feedback_topic': '/vehicle/feedback',
                 'imu_topic': '/vehicle/imu',
                 'state_topic': '/vehicle/state',
