@@ -37,6 +37,7 @@ class LowLevelControllerNode(Node):
         self.declare_parameter('servo_min', 37)             # degrees (full right)
         self.declare_parameter('servo_max', 127)            # degrees (full left)
         self.declare_parameter('max_steering_angle', 45.0)  # degrees (+/- from center)
+        self.declare_parameter('steering_offset', 4.0)      # mechanical bias (+/- degrees)
         self.declare_parameter('cmd_topic', '/vehicle/cmd')
         self.declare_parameter('feedback_topic', '/vehicle/feedback')
         self.declare_parameter('imu_topic', '/vehicle/imu')
@@ -52,6 +53,7 @@ class LowLevelControllerNode(Node):
         self.servo_min = self.get_parameter('servo_min').value
         self.servo_max = self.get_parameter('servo_max').value
         self.max_steering_angle = self.get_parameter('max_steering_angle').value
+        self.steering_offset = self.get_parameter('steering_offset').value
         cmd_topic = self.get_parameter('cmd_topic').value
         feedback_topic = self.get_parameter('feedback_topic').value
         imu_topic = self.get_parameter('imu_topic').value
@@ -247,7 +249,8 @@ class LowLevelControllerNode(Node):
         msg.heading:  degrees from center (positive = left, negative = right)
         """
         velocity = msg.velocity
-        heading = msg.heading
+        # Add mechanical steering offset to the requested kinematic heading
+        heading = msg.heading + self.steering_offset
 
         # Update watchdog
         self.last_cmd_time = time.time()

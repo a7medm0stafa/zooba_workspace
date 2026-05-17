@@ -65,6 +65,10 @@ def generate_launch_description():
         'use_pi_mode', default_value='true',
         description='Set to false to run the node in open-loop (PWM) mode'
     )
+    steering_offset_arg = DeclareLaunchArgument(
+        'steering_offset', default_value='4.0',
+        description='Mechanical steering bias (+/- degrees)'
+    )
 
     # Node
     low_level_node = Node(
@@ -81,6 +85,7 @@ def generate_launch_description():
             'servo_min': LaunchConfiguration('servo_min'),
             'servo_max': LaunchConfiguration('servo_max'),
             'max_steering_angle': LaunchConfiguration('max_steering_angle'),
+            'steering_offset': LaunchConfiguration('steering_offset'),
             'watchdog_timeout': LaunchConfiguration('watchdog_timeout'),
             'cmd_topic': LaunchConfiguration('cmd_topic'),
             'feedback_topic': LaunchConfiguration('feedback_topic'),
@@ -97,6 +102,7 @@ def generate_launch_description():
         servo_min_arg,
         servo_max_arg,
         max_steering_arg,
+        steering_offset_arg,
         watchdog_arg,
         cmd_topic_arg,
         feedback_topic_arg,

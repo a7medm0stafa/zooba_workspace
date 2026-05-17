@@ -93,6 +93,7 @@ def generate_launch_description():
             'servo_min': 37,
             'servo_max': 127,
             'max_steering_angle': 45.0,
+            'steering_offset': 4.0,      # Corrects mechanical rightward pull
             'cmd_topic': '/vehicle/cmd',
             'feedback_topic': '/vehicle/feedback',
             'imu_topic': '/vehicle/imu',

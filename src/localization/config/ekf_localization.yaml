@@ -54,12 +54,9 @@ ekf_localization_node:
 
     # Ackermann heading correction — fights dynamic gyro bias from vibrations
     # Uses steering geometry to cross-check gyro heading rate
-    # WARNING: Currently DISABLED because the commanded heading on /vehicle/cmd
-    # includes the steering_offset (+4.0°) from the lateral controller. The
-    # Ackermann model treats this constant offset as a real steering command,
-    # accumulating phantom leftward yaw → controller compensates with hard
-    # right → 180° runaway. Fix: move steering_offset to LLC before re-enabling.
-    use_ackermann_heading: false
+    # Re-enabled because steering_offset is now handled cleanly in the LLC,
+    # meaning the heading command on /vehicle/cmd is pure kinematic intent.
+    use_ackermann_heading: true
     sigma_ackermann_heading: 0.3
     ackermann_min_velocity: 0.03
 
