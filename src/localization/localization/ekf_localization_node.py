@@ -133,9 +133,16 @@ class EKFLocalizationNode(Node):
         # IMU — all stored in SI units (rad/s, rad)
         self.imu_initialized = False
         self.imu_yaw_offset_rad = 0.0
-        self.latest_gyro_z = 0.0          # rad/s (bias-corrected by Arduino)
+        self.latest_gyro_z = 0.0          # rad/s (raw from LLC, before bias correction)
         self.latest_imu_yaw_rad = None    # rad (after offset correction)
         self.start_time = None
+
+        # Gyro bias estimation (two-layer approach)
+        # Layer 1: Static calibration during settle period
+        self.gyro_z_settle_samples = []   # accumulate gyro_z during settling
+        self.gyro_z_bias = 0.0            # estimated bias [rad/s]
+        # Layer 2: ZUPT-based runtime tracking (exponential moving average)
+        self.zupt_bias_alpha = 0.01       # EMA smoothing factor (slow adaptation)
 
         # Simulation
         self.sim_velocity = 0.0
@@ -240,24 +247,30 @@ class EKFLocalizationNode(Node):
 
         if not self.imu_initialized:
             if elapsed < self.imu_settle_time:
-                # Still settling — track raw yaw for offset, store latest gyro
+                # Still settling — accumulate gyro_z samples for bias estimation
                 self.imu_yaw_offset_rad = math.radians(msg.yaw)
                 self.latest_gyro_z = msg.gyro_z
+                self.gyro_z_settle_samples.append(msg.gyro_z)
                 return
 
-            # Settling complete — capture yaw offset
+            # Settling complete — compute gyro bias + yaw offset
             self.imu_yaw_offset_rad = math.radians(msg.yaw)
+            if len(self.gyro_z_settle_samples) > 10:
+                self.gyro_z_bias = float(np.mean(self.gyro_z_settle_samples))
             self.imu_initialized = True
             self.get_logger().info(
                 f'IMU initialized: yaw_offset={math.degrees(self.imu_yaw_offset_rad):.2f}° '
+                f'gyro_z_bias={math.degrees(self.gyro_z_bias):.3f}°/s '
+                f'({len(self.gyro_z_settle_samples)} samples) '
                 f'(after {self.imu_settle_time:.1f}s settling)')
+            self.gyro_z_settle_samples = []  # free memory
 
         # ---- Store latest gyro reading (used in prediction) ----
-        # Already in rad/s from firmware, already bias-corrected by Arduino
+        # Raw from LLC — we subtract our own bias in the timer callback
         self.latest_gyro_z = msg.gyro_z
 
-        # ---- Yaw rate for VehicleState output ----
-        self.current_yaw_rate = msg.gyro_z
+        # ---- Yaw rate for VehicleState output (bias-corrected) ----
+        self.current_yaw_rate = msg.gyro_z - self.gyro_z_bias
 
         # ---- Compute corrected IMU heading (single deg→rad conversion) ----
         raw_yaw_rad = math.radians(msg.yaw)
@@ -357,16 +370,29 @@ class EKFLocalizationNode(Node):
 
         self.timer_tick_count += 1
 
+        # ---- Bias-corrected gyro for prediction ----
+        corrected_gyro_z = self.latest_gyro_z - self.gyro_z_bias
+
         # ---- EKF Prediction step ----
-        self.ekf.predict(self.latest_gyro_z, dt)
+        self.ekf.predict(corrected_gyro_z, dt)
 
         # ---- Zero-Velocity Update (ZUPT) ----
+        is_stationary = False
         if self.source == 'hardware':
-            if abs(self.last_encoder_velocity) < self.zupt_velocity_threshold:
-                self.ekf.zupt(self.R_zupt)
+            is_stationary = abs(self.last_encoder_velocity) < self.zupt_velocity_threshold
         else:
-            if abs(self.sim_velocity) < self.zupt_velocity_threshold:
-                self.ekf.zupt(self.R_zupt)
+            is_stationary = abs(self.sim_velocity) < self.zupt_velocity_threshold
+
+        if is_stationary:
+            self.ekf.zupt(self.R_zupt)
+
+            # ---- ZUPT-based runtime bias tracking ----
+            # When stationary, true yaw rate = 0. Any nonzero gyro reading is bias.
+            # Track with slow EMA to handle temperature drift during long runs.
+            if self.source == 'hardware':
+                raw_gz = self.latest_gyro_z
+                self.gyro_z_bias = (self.zupt_bias_alpha * raw_gz
+                                    + (1.0 - self.zupt_bias_alpha) * self.gyro_z_bias)
 
         # ---- IMU heading update (DISABLED by default) ----
         if (self.use_imu_heading
@@ -410,6 +436,8 @@ class EKFLocalizationNode(Node):
 
         self.get_logger().info(
             f'[RAW ] gyro_z={math.degrees(self.latest_gyro_z):.3f}°/s '
+            f'bias={math.degrees(self.gyro_z_bias):.3f}°/s '
+            f'corrected={math.degrees(self.latest_gyro_z - self.gyro_z_bias):.3f}°/s '
             f'imu_yaw={imu_yaw_deg:.2f}° '
             f'enc_vel={self.last_encoder_velocity:.3f}m/s '
             f'steer={math.degrees(self.current_steering_angle):.2f}°',
