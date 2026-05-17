@@ -63,9 +63,10 @@ ekf_localization_node:
     # Cross-checks gyro heading against steering geometry.
     # The innovation drives both heading correction AND bias estimation.
     use_ackermann_heading: true   # ENABLED: essential for bias estimation
-    sigma_ackermann_heading: 0.1  # rad — Ackermann heading measurement noise
-                                  # Lower = trust Ackermann more (faster bias learning)
-                                  # Higher = trust gyro more (slower bias learning)
+    sigma_ackermann_heading: 0.3  # rad — Ackermann heading measurement noise
+                                  # 0.1 = too aggressive (eats real turns as "bias")
+                                  # 0.2 = balanced (learns bias, detects real turns)
+                                  # 0.5 = trust gyro more (slow bias learning)
     ackermann_min_velocity: 0.03  # m/s — only apply when moving
 
     # Initial pose (can be overridden per-launch)
