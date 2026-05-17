@@ -257,11 +257,11 @@ class LowLevelControllerNode(Node):
         heading = max(-self.max_steering_angle, min(self.max_steering_angle, heading))
 
         if heading >= 0:
-            # Positive heading (LEFT) -> move servo towards servo_max (physically turns wheels left)
-            servo_angle = self.servo_center + (heading / self.max_steering_angle) * (self.servo_max - self.servo_center)
+            # Positive heading (LEFT) -> move servo towards servo_min (physically turns wheels left)
+            servo_angle = self.servo_center - (heading / self.max_steering_angle) * (self.servo_center - self.servo_min)
         else:
-            # Negative heading (RIGHT) -> move servo towards servo_min (physically turns wheels right)
-            servo_angle = self.servo_center + (heading / self.max_steering_angle) * (self.servo_center - self.servo_min)
+            # Negative heading (RIGHT) -> move servo towards servo_max (physically turns wheels right)
+            servo_angle = self.servo_center - (heading / self.max_steering_angle) * (self.servo_max - self.servo_center)
 
         servo_angle = int(round(servo_angle))
         servo_angle = max(self.servo_min, min(self.servo_max, servo_angle))

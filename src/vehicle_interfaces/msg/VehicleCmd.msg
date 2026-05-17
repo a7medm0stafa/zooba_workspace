@@ -5,7 +5,7 @@
 # velocity: target velocity in m/s
 #           positive = forward, negative = reverse
 # heading:  steering angle in degrees from center
-#           positive = left (CCW), negative = right (CW)  [REP-103]
+#           positive = right, negative = left
 
 std_msgs/Header header
 
