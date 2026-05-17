@@ -339,6 +339,7 @@ class EKFLocalizationNode(Node):
             if front_left_steer_idx is not None:
                 self.sim_steering_angle = msg.position[front_left_steer_idx]
                 self.current_steering_angle = self.sim_steering_angle
+                self.commanded_steering_rad = self.sim_steering_angle
 
                 # Compute yaw rate from Ackermann kinematics: ω = v·tan(δ)/L
                 if abs(self.sim_steering_angle) > 1e-4 and abs(self.sim_velocity) > 0.01:
@@ -387,8 +388,22 @@ class EKFLocalizationNode(Node):
         # ---- Bias-corrected gyro for prediction ----
         corrected_gyro_z = self.latest_gyro_z - self.gyro_z_bias
 
+        # ---- Compute Ackermann heading rate from steering ----
+        # The gyro has ~0.11 rad/s dynamic bias from motor vibrations.
+        # Ackermann kinematics (ω = v·tan(δ)/L) has no vibration bias
+        # and correctly predicts ω=0 when steering is straight (δ=0).
+        omega_ackermann = None
+        if self.use_ackermann_heading:
+            delta = self.commanded_steering_rad
+            delta_clamped = max(-1.2, min(1.2, delta))
+            v_current = self.ekf.velocity
+            omega_ackermann = v_current * math.tan(delta_clamped) / self.wheelbase
+
         # ---- EKF Prediction step ----
-        self.ekf.predict(corrected_gyro_z, dt)
+        # When omega_ackermann is provided, it REPLACES the gyro for
+        # heading prediction, eliminating vibration-induced drift.
+        self.ekf.predict(corrected_gyro_z, dt,
+                         omega_ackermann=omega_ackermann)
 
         # ---- Zero-Velocity Update (ZUPT) ----
         is_stationary = False
@@ -405,18 +420,6 @@ class EKFLocalizationNode(Node):
                 and self.latest_imu_yaw_rad is not None
                 and self.timer_tick_count % self.heading_update_divisor == 0):
             self.ekf.update_heading(self.latest_imu_yaw_rad, self.R_heading)
-
-        # ---- Ackermann heading correction ----
-        # Cross-checks gyro heading rate against Ackermann kinematics
-        # Only active when moving (need velocity for Ackermann to work)
-        if (self.use_ackermann_heading
-                and abs(self.ekf.velocity) > self.ackermann_min_velocity):
-            self.ekf.update_heading_from_ackermann(
-                steering_angle=self.commanded_steering_rad,
-                wheelbase=self.wheelbase,
-                dt=dt,
-                R=self.R_ackermann,
-            )
 
         # ---- Publish VehicleState ----
         state = VehicleState()

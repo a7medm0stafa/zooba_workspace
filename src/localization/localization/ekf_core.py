@@ -103,15 +103,22 @@ class EKF2D:
 
     # ==================== Prediction ====================
 
-    def predict(self, omega_z: float, dt: float):
+    def predict(self, omega_z: float, dt: float,
+                omega_ackermann: float = None):
         """EKF prediction step using unicycle kinematic model.
 
         Parameters
         ----------
         omega_z : float
             Bias-corrected gyroscope yaw rate [rad/s].
+            Used for heading prediction ONLY if omega_ackermann is None.
         dt : float
             Time step [s]. Must be > 0.
+        omega_ackermann : float, optional
+            Heading rate from Ackermann kinematics: v·tan(δ)/L [rad/s].
+            When provided, this REPLACES the gyro for heading prediction.
+            This is essential on hardware where motor vibrations cause
+            dynamic gyro bias (~0.1 rad/s) that corrupts heading.
         """
         if dt <= 0.0:
             return
@@ -124,10 +131,15 @@ class EKF2D:
         cos_th = math.cos(theta)
         sin_th = math.sin(theta)
 
+        # ---- Choose heading rate source ----
+        # Ackermann kinematics is preferred when available because
+        # the gyro has significant dynamic bias from motor vibrations.
+        omega_for_heading = omega_ackermann if omega_ackermann is not None else omega_z
+
         # ---- State prediction f(x, u, dt) ----
         x_new = x + v * cos_th * dt
         y_new = y + v * sin_th * dt
-        theta_new = theta + omega_z * dt
+        theta_new = theta + omega_for_heading * dt
         v_new = v  # constant velocity model
 
         # ---- Jacobian F = ∂f/∂x ----
