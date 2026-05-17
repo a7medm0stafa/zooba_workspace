@@ -229,8 +229,8 @@ class LowLevelControllerNode(Node):
                 imu_msg.accel_z = int(parts[4]) / 100.0
                 imu_msg.gyro_x = int(parts[5]) / 100.0
                 imu_msg.gyro_y = -(int(parts[6]) / 100.0)
-                imu_msg.gyro_z = int(parts[7]) / 100.0   # Arduino already CCW-positive (RHR)
-                imu_msg.yaw = int(parts[8]) / 10.0        # Arduino yaw follows gyro_z convention
+                imu_msg.gyro_z = -(int(parts[7]) / 100.0)
+                imu_msg.yaw = -(int(parts[8]) / 10.0)  # ×10 integer → degrees
                 self.imu_pub.publish(imu_msg)
 
         except (ValueError, IndexError) as e:
