@@ -1,8 +1,8 @@
 # =====================================================================
-# EKF Localization v2.0 — Default Parameters
+# EKF Localization v3.0 — Default Parameters
 # =====================================================================
 # FILE:    localization/config/ekf_localization.yaml
-# STATUS:  REWRITTEN for 4-state EKF (replaces old 5-state config)
+# STATUS:  5-state EKF with online gyro bias estimation
 # CREATED: 2026-05-17
 #
 # TUNING GUIDELINES:
@@ -10,10 +10,12 @@
 #                         ↓ = smoother position, slower adaptation
 #   sigma_yaw_rate:       ↑ = heading tracks gyro less rigidly
 #                         ↓ = heading trusts gyro more
+#   sigma_bias:           ↑ = bias adapts faster (good for variable vibrations)
+#                         ↓ = bias changes slowly (stable but slow convergence)
 #   sigma_encoder:        ↑ = distrust encoder velocity
 #                         ↓ = trust encoder velocity
-#   sigma_imu_heading:    ↑ = distrust Arduino heading (recommended)
-#                         only matters if use_imu_heading = true
+#   sigma_ackermann:      ↑ = trust gyro more for heading rate
+#                         ↓ = trust Ackermann model more (faster bias learning)
 #   sigma_zupt:           keep very small — stationary is high confidence
 # =====================================================================
 
@@ -35,9 +37,14 @@ ekf_localization_node:
     publish_rate: 50.0       # Hz (EKF prediction + publish rate)
 
     # Process noise (continuous-time standard deviations)
-    # These feed into Q = G · diag(σ², σ²) · Gᵀ (noise-input formulation)
+    # These feed into Q = G · diag(σ_v², σ_ω², σ_b²) · Gᵀ
     sigma_velocity: 0.1      # m/s — velocity prediction noise
     sigma_yaw_rate: 0.02     # rad/s — gyro rate noise
+    sigma_bias: 0.005        # rad/s² — gyro bias drift rate
+                              # Controls how fast the bias estimate can change.
+                              # 0.005 = moderate adaptation (~2-5s convergence)
+                              # 0.01  = faster adaptation, noisier bias
+                              # 0.001 = very slow adaptation, very stable
 
     # Measurement noise (standard deviations)
     sigma_encoder: 0.05      # m/s — encoder velocity measurement noise
@@ -52,14 +59,14 @@ ekf_localization_node:
     use_imu_heading: false   # DISABLED: Arduino yaw is pure gyro integration
     heading_update_divisor: 10  # Apply heading update every Nth timer tick
 
-    # Ackermann heading correction — fights dynamic gyro bias from vibrations
-    # Uses steering geometry to cross-check gyro heading rate
-    use_ackermann_heading: true   # ENABLED: essential for hardware
-    sigma_ackermann_heading: 0.1  # rad — noise of Ackermann heading estimate
-                                  # Lower = trust Ackermann more (corrects faster)
-                                  # Higher = trust gyro more (smoother but more drift)
-                                  # Start at 0.3, decrease if heading still drifts
-    ackermann_min_velocity: 0.03  # m/s — only apply when moving (need v for model)
+    # Ackermann heading correction — makes gyro bias observable
+    # Cross-checks gyro heading against steering geometry.
+    # The innovation drives both heading correction AND bias estimation.
+    use_ackermann_heading: true   # ENABLED: essential for bias estimation
+    sigma_ackermann_heading: 0.1  # rad — Ackermann heading measurement noise
+                                  # Lower = trust Ackermann more (faster bias learning)
+                                  # Higher = trust gyro more (slower bias learning)
+    ackermann_min_velocity: 0.03  # m/s — only apply when moving
 
     # Initial pose (can be overridden per-launch)
     initial_x: 0.0           # Starting X position [m]

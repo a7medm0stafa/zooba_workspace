@@ -61,6 +61,7 @@ class EKFLocalizationNode(Node):
         # Process noise (continuous-time standard deviations)
         self.declare_parameter('sigma_velocity', 0.1)
         self.declare_parameter('sigma_yaw_rate', 0.02)
+        self.declare_parameter('sigma_bias', 0.005)
 
         # Measurement noise (standard deviations)
         self.declare_parameter('sigma_encoder', 0.05)
@@ -109,6 +110,7 @@ class EKFLocalizationNode(Node):
 
         sigma_v = self.get_parameter('sigma_velocity').value
         sigma_omega = self.get_parameter('sigma_yaw_rate').value
+        sigma_bias = self.get_parameter('sigma_bias').value
         self.R_encoder = self.get_parameter('sigma_encoder').value ** 2
         self.R_heading = self.get_parameter('sigma_imu_heading').value ** 2
         self.R_zupt = self.get_parameter('sigma_zupt').value ** 2
@@ -126,7 +128,8 @@ class EKFLocalizationNode(Node):
         # ================================================================
         # Initialize EKF
         # ================================================================
-        self.ekf = EKF2D(sigma_v=sigma_v, sigma_omega=sigma_omega)
+        self.ekf = EKF2D(sigma_v=sigma_v, sigma_omega=sigma_omega,
+                         sigma_bias=sigma_bias)
         self.ekf.set_initial_state(
             x=initial_x,
             y=initial_y,
@@ -200,7 +203,7 @@ class EKFLocalizationNode(Node):
         # Startup log
         # ================================================================
         self.get_logger().info('=' * 60)
-        self.get_logger().info('EKF Localization Node v2.0 (4-state rewrite)')
+        self.get_logger().info('EKF Localization Node v3.0 (5-state, bias estimation)')
         self.get_logger().info(f'  Source            : {self.source}')
         self.get_logger().info(f'  Wheelbase         : {self.wheelbase:.3f} m')
         self.get_logger().info(f'  Wheel radius      : {self.wheel_radius:.4f} m')
@@ -209,6 +212,7 @@ class EKFLocalizationNode(Node):
         self.get_logger().info(f'  Publish rate      : {publish_rate:.0f} Hz')
         self.get_logger().info(f'  σ_velocity        : {sigma_v}')
         self.get_logger().info(f'  σ_yaw_rate        : {sigma_omega}')
+        self.get_logger().info(f'  σ_bias            : {sigma_bias}')
         self.get_logger().info(f'  σ_encoder         : {math.sqrt(self.R_encoder):.4f}')
         self.get_logger().info(f'  ZUPT threshold    : {self.zupt_velocity_threshold:.3f} m/s')
         self.get_logger().info(f'  IMU heading update: {"ENABLED" if self.use_imu_heading else "DISABLED"}')
@@ -385,25 +389,17 @@ class EKFLocalizationNode(Node):
 
         self.timer_tick_count += 1
 
-        # ---- Bias-corrected gyro for prediction ----
+        # ---- Gyro for prediction (EKF subtracts its own bias estimate) ----
+        # Pass the LLC-bias-corrected gyro. The EKF has a 5th state (b_ω)
+        # that estimates and removes any remaining dynamic bias from
+        # motor vibrations. No need for manual bias correction here.
         corrected_gyro_z = self.latest_gyro_z - self.gyro_z_bias
 
-        # ---- Compute Ackermann heading rate from steering ----
-        # The gyro has ~0.11 rad/s dynamic bias from motor vibrations.
-        # Ackermann kinematics (ω = v·tan(δ)/L) has no vibration bias
-        # and correctly predicts ω=0 when steering is straight (δ=0).
-        omega_ackermann = None
-        if self.use_ackermann_heading:
-            delta = self.commanded_steering_rad
-            delta_clamped = max(-1.2, min(1.2, delta))
-            v_current = self.ekf.velocity
-            omega_ackermann = v_current * math.tan(delta_clamped) / self.wheelbase
-
         # ---- EKF Prediction step ----
-        # When omega_ackermann is provided, it REPLACES the gyro for
-        # heading prediction, eliminating vibration-induced drift.
-        self.ekf.predict(corrected_gyro_z, dt,
-                         omega_ackermann=omega_ackermann)
+        # Heading: θ' = θ + (ω_gyro - b_ω_estimated) · dt
+        # The EKF now estimates b_ω online, so the gyro detects real
+        # turns while vibration bias is automatically removed.
+        self.ekf.predict(corrected_gyro_z, dt)
 
         # ---- Zero-Velocity Update (ZUPT) ----
         is_stationary = False
@@ -414,6 +410,18 @@ class EKFLocalizationNode(Node):
 
         if is_stationary:
             self.ekf.zupt(self.R_zupt)
+
+        # ---- Ackermann heading measurement ----
+        # Cross-checks gyro heading against steering geometry.
+        # The innovation drives BOTH heading correction AND bias learning.
+        # This is what makes the gyro bias observable.
+        if self.use_ackermann_heading:
+            self.ekf.update_heading_from_ackermann(
+                steering_angle=self.commanded_steering_rad,
+                wheelbase=self.wheelbase,
+                dt=dt,
+                R=self.R_ackermann,
+            )
 
         # ---- IMU heading update (DISABLED by default) ----
         if (self.use_imu_heading
@@ -469,6 +477,7 @@ class EKFLocalizationNode(Node):
             f'[EKF ] pos=({self.ekf.position_x:.3f},{self.ekf.position_y:.3f}) '
             f'yaw={math.degrees(self.ekf.heading):.2f}° '
             f'v={self.ekf.velocity:.3f} '
+            f'gyro_bias={math.degrees(self.ekf.gyro_bias):.3f}°/s '
             f'σ=({math.sqrt(max(0, cov[0])):.4f},'
             f'{math.sqrt(max(0, cov[1])):.4f},'
             f'{math.sqrt(max(0, cov[2])):.4f})',
