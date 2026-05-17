@@ -190,6 +190,7 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
             (5.0, 0.0),
             (7.5, 0.0),
             (10.0, 0.0),
+            (12.0, 0.0),
         ], False  # not closed
 
     elif track_name == 'track_2':
@@ -223,6 +224,7 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
             (9.0,  0.3),        # past obstacle 2
             (9.5,  0.3),        # anchor straight
             (10.0, 0.3),        # finish
+            (11.0, 0.3),        # finish
         ], False  # not closed
 
     elif track_name == 'track_3':
