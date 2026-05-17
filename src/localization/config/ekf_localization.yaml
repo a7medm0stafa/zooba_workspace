@@ -23,44 +23,44 @@ ekf_localization_node:
     source: "hardware"
 
     # Vehicle geometry
-    wheelbase: 0.265         # Distance between front and rear axles [m]
-    wheel_radius: 0.033      # Wheel radius [m]
-    encoder_cpr: 5471        # Encoder counts per output-shaft revolution
-    gear_ratio: 124.333      # Total gear ratio (motor shaft → output shaft)
+    wheelbase: 0.265 # Distance between front and rear axles [m]
+    wheel_radius: 0.033 # Wheel radius [m]
+    encoder_cpr: 5471 # Encoder counts per output-shaft revolution
+    gear_ratio: 124.333 # Total gear ratio (motor shaft → output shaft)
 
     # Topics (hardware mode)
     feedback_topic: /vehicle/feedback
     imu_topic: /vehicle/imu
     state_topic: /vehicle/state
-    publish_rate: 50.0       # Hz (EKF prediction + publish rate)
+    publish_rate: 50.0 # Hz (EKF prediction + publish rate)
 
     # Process noise (continuous-time standard deviations)
     # These feed into Q = G · diag(σ², σ²) · Gᵀ (noise-input formulation)
-    sigma_velocity: 0.1      # m/s — velocity prediction noise
-    sigma_yaw_rate: 0.02     # rad/s — gyro rate noise
+    sigma_velocity: 0.1 # m/s — velocity prediction noise
+    sigma_yaw_rate: 0.02 # rad/s — gyro rate noise
 
     # Measurement noise (standard deviations)
-    sigma_encoder: 0.05      # m/s — encoder velocity measurement noise
-    sigma_imu_heading: 0.20  # rad (~11.5°) — IMU heading noise (if enabled)
+    sigma_encoder: 0.05 # m/s — encoder velocity measurement noise
+    sigma_imu_heading: 0.20 # rad (~11.5°) — IMU heading noise (if enabled)
 
     # Zero-Velocity Update (ZUPT) — prevents drift when stationary
-    zupt_velocity_threshold: 0.02  # Speed below which ZUPT activates [m/s]
-    sigma_zupt: 0.001        # m/s — ZUPT virtual measurement noise
+    zupt_velocity_threshold: 0.02 # Speed below which ZUPT activates [m/s]
+    sigma_zupt: 0.001 # m/s — ZUPT virtual measurement noise
 
     # IMU configuration
-    imu_settle_time: 5.0     # Wait before trusting IMU [s]
-    use_imu_heading: false   # DISABLED: Arduino yaw is pure gyro integration
-    heading_update_divisor: 10  # Apply heading update every Nth timer tick
+    imu_settle_time: 5.0 # Wait before trusting IMU [s]
+    use_imu_heading: false # DISABLED: Arduino yaw is pure gyro integration
+    heading_update_divisor: 10 # Apply heading update every Nth timer tick
 
     # Ackermann heading correction — fights dynamic gyro bias from vibrations
     # Uses steering geometry to cross-check gyro heading rate
     # Re-enabled because steering_offset is now handled cleanly in the LLC,
     # meaning the heading command on /vehicle/cmd is pure kinematic intent.
-    use_ackermann_heading: true
+    use_ackermann_heading: false
     sigma_ackermann_heading: 0.3
     ackermann_min_velocity: 0.03
 
     # Initial pose (can be overridden per-launch)
-    initial_x: 0.0           # Starting X position [m]
-    initial_y: 0.0           # Starting Y position [m]
-    initial_yaw: 0.0         # Starting heading [degrees]
+    initial_x: 0.0 # Starting X position [m]
+    initial_y: 0.0 # Starting Y position [m]
+    initial_yaw: 0.0 # Starting heading [degrees]
