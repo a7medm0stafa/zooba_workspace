@@ -34,8 +34,8 @@ def generate_launch_description():
         description='Wheel radius in meters (33 mm wheel)'
     )
     servo_center_arg = DeclareLaunchArgument(
-        'servo_center', default_value='82',
-        description='Servo center angle (straight)'
+        'servo_center', default_value='84',
+        description='Servo center angle (straight — calibrated for rightward drift)'
     )
     servo_min_arg = DeclareLaunchArgument(
         'servo_min', default_value='37',

@@ -89,7 +89,7 @@ def generate_launch_description():
             'baud_rate': 115200,
             'max_velocity': 0.25,        # physical limit (from vehicle_params.yaml)
             'wheel_radius': 0.033,       # 33 mm wheel
-            'servo_center': 82,
+            'servo_center': 84,          # was 82 — increased by 2 to compensate rightward drift
             'servo_min': 37,
             'servo_max': 127,
             'max_steering_angle': 45.0,
