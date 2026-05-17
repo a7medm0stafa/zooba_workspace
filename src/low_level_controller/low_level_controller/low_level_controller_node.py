@@ -224,16 +224,16 @@ class LowLevelControllerNode(Node):
                 imu_msg.header.stamp = self.get_clock().now().to_msg()
                 imu_msg.header.frame_id = 'imu_link'
                 # Values are ×100 integers from Arduino.
-                # The firmware already applies REP-103 sign convention
-                # (CCW-positive) via negation at line 288 of the .ino.
-                # Do NOT negate again here — that was the double-inversion bug.
+                # The Arduino firmware negation (line 288) is WRONG for this
+                # board's chip mounting. The LLC must negate again to restore
+                # correct REP-103 signs (CCW-positive, CW-negative).
                 imu_msg.accel_x = int(parts[2]) / 100.0
-                imu_msg.accel_y = int(parts[3]) / 100.0
+                imu_msg.accel_y = -(int(parts[3]) / 100.0)
                 imu_msg.accel_z = int(parts[4]) / 100.0
                 imu_msg.gyro_x = int(parts[5]) / 100.0
-                imu_msg.gyro_y = int(parts[6]) / 100.0
-                imu_msg.gyro_z = int(parts[7]) / 100.0
-                imu_msg.yaw = int(parts[8]) / 10.0  # ×10 integer → degrees
+                imu_msg.gyro_y = -(int(parts[6]) / 100.0)
+                imu_msg.gyro_z = -(int(parts[7]) / 100.0)
+                imu_msg.yaw = -(int(parts[8]) / 10.0)  # ×10 integer → degrees
                 self.imu_pub.publish(imu_msg)
 
         except (ValueError, IndexError) as e:
