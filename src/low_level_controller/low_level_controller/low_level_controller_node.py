@@ -7,15 +7,15 @@ Sends serial frames to Arduino in two modes:
   - Mode 1 (PI control): 1,<target_rpm_x10>,<servo_angle>\n
 
 Reads extended feedback from Arduino:
-  FB:<rpm>,<ticks>[,<ax>,<ay>,<az>,<gx>,<gy>,<gz>,<yaw>]
-Publishes VehicleFeedback and ImuData.
+  FB:<rpm>,<ticks>,<ax>,<ay>,<az>,<gx>,<gy>,<gz>,<yaw>,<angle>,<ekf_x>,<ekf_y>,<ekf_theta>,<ekf_v>
+Publishes VehicleFeedback, ImuData, and VehicleState (from Arduino EKF).
 
 Includes watchdog safety: stops vehicle if no command received within timeout.
 """
 
 import rclpy
 from rclpy.node import Node
-from vehicle_interfaces.msg import VehicleCmd, VehicleFeedback, ImuData
+from vehicle_interfaces.msg import VehicleCmd, VehicleFeedback, ImuData, VehicleState
 import serial
 import serial.tools.list_ports
 import time
@@ -40,6 +40,7 @@ class LowLevelControllerNode(Node):
         self.declare_parameter('cmd_topic', '/vehicle/cmd')
         self.declare_parameter('feedback_topic', '/vehicle/feedback')
         self.declare_parameter('imu_topic', '/vehicle/imu')
+        self.declare_parameter('state_topic', '/vehicle/state')
         self.declare_parameter('use_pi_mode', True)         # Use Arduino PI mode
         self.declare_parameter('gear_ratio', 134.181)       # Total gear ratio to wheel
 
@@ -55,6 +56,7 @@ class LowLevelControllerNode(Node):
         cmd_topic = self.get_parameter('cmd_topic').value
         feedback_topic = self.get_parameter('feedback_topic').value
         imu_topic = self.get_parameter('imu_topic').value
+        state_topic = self.get_parameter('state_topic').value
         self.use_pi_mode = self.get_parameter('use_pi_mode').value
         self.gear_ratio = self.get_parameter('gear_ratio').value
 
@@ -84,6 +86,14 @@ class LowLevelControllerNode(Node):
             imu_topic,
             10
         )
+        self.state_pub = self.create_publisher(
+            VehicleState,
+            state_topic,
+            10
+        )
+
+        # Track last EKF state for steering_angle field
+        self.last_cmd_heading_rad = 0.0
 
         # --------------- Serial Reader Thread ---------------
         self._serial_thread_running = True
@@ -102,12 +112,14 @@ class LowLevelControllerNode(Node):
         self.get_logger().info(f'  Cmd topic     : {cmd_topic}')
         self.get_logger().info(f'  Feedback topic: {feedback_topic}')
         self.get_logger().info(f'  IMU topic     : {imu_topic}')
+        self.get_logger().info(f'  State topic   : {state_topic}')
         self.get_logger().info(f'  Max velocity  : {self.max_velocity} m/s')
         self.get_logger().info(f'  Wheel radius  : {self.wheel_radius} m')
         self.get_logger().info(f'  Gear ratio    : 1:{self.gear_ratio}')
         self.get_logger().info(f'  PI mode       : {"enabled" if self.use_pi_mode else "disabled (open-loop)"}')
         self.get_logger().info(f'  Servo range   : {self.servo_min}°–{self.servo_max}° (center: {self.servo_center}°)')
         self.get_logger().info(f'  Max steering  : ±{self.max_steering_angle}°')
+        self.get_logger().info(f'  Arduino EKF   : ENABLED (publishes to {state_topic})')
         self.get_logger().info('=' * 55)
 
     # ==================== Serial Connection ====================
@@ -192,10 +204,10 @@ class LowLevelControllerNode(Node):
 
     def _parse_feedback(self, line):
         """
-        Parse feedback line and publish VehicleFeedback + ImuData.
+        Parse feedback line and publish VehicleFeedback + ImuData + VehicleState.
 
-        Format (2 fields, no IMU):  FB:<rpm>,<ticks>
-        Format (9 fields, with IMU): FB:<rpm>,<ticks>,<ax>,<ay>,<az>,<gx>,<gy>,<gz>,<yaw>
+        Format (14 fields, with IMU + EKF):
+          FB:<rpm>,<ticks>,<ax>,<ay>,<az>,<gx>,<gy>,<gz>,<yaw>,<angle>,<ekf_x>,<ekf_y>,<ekf_theta>,<ekf_v>
         """
         try:
             data = line[3:]  # Strip "FB:"
@@ -218,23 +230,35 @@ class LowLevelControllerNode(Node):
             fb_msg.encoder_ticks = encoder_ticks
             self.feedback_pub.publish(fb_msg)
 
-            # Parse IMU data if available (9 fields total)
+            # Parse IMU data if available (fields 2-8)
             if len(parts) >= 9:
                 imu_msg = ImuData()
                 imu_msg.header.stamp = self.get_clock().now().to_msg()
                 imu_msg.header.frame_id = 'imu_link'
-                # Values are ×100 integers from Arduino.
-                # The Arduino firmware negation (line 288) is WRONG for this
-                # board's chip mounting. The LLC must negate again to restore
-                # correct REP-103 signs (CCW-positive, CW-negative).
                 imu_msg.accel_x = int(parts[2]) / 100.0
                 imu_msg.accel_y = -(int(parts[3]) / 100.0)
                 imu_msg.accel_z = int(parts[4]) / 100.0
                 imu_msg.gyro_x = int(parts[5]) / 100.0
                 imu_msg.gyro_y = -(int(parts[6]) / 100.0)
                 imu_msg.gyro_z = -(int(parts[7]) / 100.0)
-                imu_msg.yaw = -(int(parts[8]) / 10.0)  # ×10 integer → degrees
+                imu_msg.yaw = -(int(parts[8]) / 10.0)
                 self.imu_pub.publish(imu_msg)
+
+            # Parse Arduino EKF state (fields 10-13: ekf_x, ekf_y, ekf_theta, ekf_v)
+            # Field 9 is shaft angle, fields 10-13 are EKF
+            if len(parts) >= 14:
+                state_msg = VehicleState()
+                state_msg.header.stamp = self.get_clock().now().to_msg()
+                state_msg.header.frame_id = 'odom'
+                state_msg.x = float(parts[10])
+                state_msg.y = float(parts[11])
+                state_msg.yaw = float(parts[12])
+                state_msg.velocity = float(parts[13])
+                # Yaw rate from IMU (if available)
+                if len(parts) >= 9:
+                    state_msg.yaw_rate = -(int(parts[7]) / 100.0)  # gyro_z
+                state_msg.steering_angle = self.last_cmd_heading_rad
+                self.state_pub.publish(state_msg)
 
         except (ValueError, IndexError) as e:
             self.get_logger().warn(f'Failed to parse feedback: {line} ({e})')
@@ -249,6 +273,9 @@ class LowLevelControllerNode(Node):
         """
         velocity = msg.velocity
         heading = msg.heading
+
+        # Track commanded heading for state message
+        self.last_cmd_heading_rad = math.radians(heading)
 
         # Update watchdog
         self.last_cmd_time = time.time()

@@ -1,29 +1,17 @@
-"""
-Launch file for closed-loop control on hardware (Raspberry Pi + Arduino).
+"""Launch file for closed-loop control on hardware (Raspberry Pi + Arduino).
 ==========================================================================
 FILE: high_level_controller/launch/closed_loop_hw.launch.py
 
 WHAT THIS LAUNCHES:
-    1. Low-level controller node (serial to Arduino — PI speed control on Arduino)
-    2. EKF Localization node OR dead-reckoning odometry (toggle via use_ekf arg)
-    3. Speed control node (bypass mode — forwards desired speed to Arduino PI)
-    4. Lateral control node (Stanley controller → steering angle)
-    5. Control merger node (speed + lateral → /teleop/raw_cmd)
-    6. Non-holonomic constraints node (/teleop/raw_cmd → /vehicle/cmd)
+    1. Low-level controller node (serial to Arduino — PI speed + Arduino EKF)
+    2. Speed control node (bypass mode — forwards desired speed to Arduino PI)
+    3. Lateral control node (Stanley controller → steering angle)
+    4. Control merger node (speed + lateral → /teleop/raw_cmd)
+    5. Non-holonomic constraints node (/teleop/raw_cmd → /vehicle/cmd)
 
-CONFIGURATION:
-    All EKF tuning parameters are loaded from:
-        localization/config/ekf_localization.yaml
-
-    All speed + lateral control parameters are loaded from:
-        mid_level_controller/config/controller_params.yaml
-
-USAGE:
-    # Default (EKF + Arduino PI):
-    ros2 launch high_level_controller closed_loop_hw.launch.py
-
-    # Use dead-reckoning instead of EKF:
-    ros2 launch high_level_controller closed_loop_hw.launch.py use_ekf:=false
+NOTE: The Arduino runs a 4-state EKF internally and sends x,y,theta,v
+      as part of its feedback. The LLC node parses this and publishes
+      VehicleState on /vehicle/state. No Pi-side EKF is needed.
 """
 
 import os
@@ -32,17 +20,13 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
-from launch.conditions import IfCondition, UnlessCondition
+from launch.conditions import IfCondition
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
 
     # ---- Launch arguments ----
-    use_ekf_arg = DeclareLaunchArgument(
-        'use_ekf', default_value='true',
-        description='Use EKF localization instead of dead-reckoning'
-    )
     serial_port_arg = DeclareLaunchArgument(
         'serial_port', default_value='/dev/ttyACM0',
         description='Arduino serial port'
@@ -65,10 +49,6 @@ def generate_launch_description():
     )
 
     # ---- Config file paths ----
-    ekf_config = os.path.join(
-        get_package_share_directory('localization'),
-        'config', 'ekf_localization.yaml'
-    )
     control_config = os.path.join(
         get_package_share_directory('mid_level_controller'),
         'config', 'controller_params.yaml'
@@ -78,7 +58,7 @@ def generate_launch_description():
     hlc_pkg = get_package_share_directory('high_level_controller')
     planner_config = os.path.join(hlc_pkg, 'config', 'path_planner_config.yaml')
 
-    # ---- Low-level controller node (Arduino PI for speed) ----
+    # ---- Low-level controller node (Arduino PI + EKF, publishes /vehicle/state) ----
     low_level_node = Node(
         package='low_level_controller',
         executable='low_level_controller_node',
@@ -87,62 +67,21 @@ def generate_launch_description():
         parameters=[{
             'serial_port': LaunchConfiguration('serial_port'),
             'baud_rate': 115200,
-            'max_velocity': 0.25,        # physical limit (from vehicle_params.yaml)
-            'wheel_radius': 0.033,       # 33 mm wheel
-            'servo_center': 84,          # was 82 — increased by 2 to compensate rightward drift
+            'max_velocity': 0.25,
+            'wheel_radius': 0.033,
+            'servo_center': 84,          # calibrated for rightward drift
             'servo_min': 37,
             'servo_max': 127,
             'max_steering_angle': 45.0,
             'cmd_topic': '/vehicle/cmd',
             'feedback_topic': '/vehicle/feedback',
             'imu_topic': '/vehicle/imu',
-            'use_pi_mode': True,         # Arduino handles PI speed control
+            'state_topic': '/vehicle/state',
+            'use_pi_mode': True,
             'gear_ratio': 124.333,
         }],
     )
 
-    # ---- EKF Localization node (v2.0 — 4-state filter) ----
-    ekf_node = Node(
-        package='localization',
-        executable='ekf_localization_node',
-        name='ekf_localization_node',
-        output='screen',
-        condition=IfCondition(LaunchConfiguration('use_ekf')),
-        parameters=[
-            ekf_config,
-            {
-                'source': 'hardware',
-                'wheelbase': 0.265,
-                'wheel_radius': 0.033,
-                'encoder_cpr': 5471,
-                'gear_ratio': 124.333,
-                'feedback_topic': '/vehicle/feedback',
-                'imu_topic': '/vehicle/imu',
-                'state_topic': '/vehicle/state',
-                'publish_rate': 50.0,
-            }
-        ],
-    )
-
-    # ---- Classic Odometry node (dead-reckoning fallback) ----
-    odometry_node = Node(
-        package='localization',
-        executable='odometry_node',
-        name='odometry_node',
-        output='screen',
-        condition=UnlessCondition(LaunchConfiguration('use_ekf')),
-        parameters=[{
-            'source': 'hardware',
-            'wheelbase': 0.265,
-            'wheel_radius': 0.033,
-            'encoder_cpr': 5471,
-            'use_imu_heading': True,
-            'feedback_topic': '/vehicle/feedback',
-            'imu_topic': '/vehicle/imu',
-            'state_topic': '/vehicle/state',
-            'publish_rate': 20.0,
-        }],
-    )
 
     # ---- Speed control node (bypass — Arduino handles PI) ----
     speed_control_node = Node(
@@ -222,16 +161,13 @@ def generate_launch_description():
 
     return LaunchDescription([
         # Arguments
-        use_ekf_arg,
         serial_port_arg,
         desired_speed_arg,
         desired_y_arg,
         track_arg,
         use_planner_arg,
-        # Hardware
+        # Hardware (LLC publishes /vehicle/state from Arduino EKF)
         low_level_node,
-        ekf_node,
-        odometry_node,
         # Path planner (conditional)
         path_planner_node,
         # Controllers
