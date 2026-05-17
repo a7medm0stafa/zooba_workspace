@@ -62,8 +62,8 @@ control_merger_node:
 # ==================================================================
 path_planner_node:
   ros__parameters:
-    cruise_speed: 0.15          # [m/s] nominal straight-line speed (hardware)
-    curve_speed: 0.08           # [m/s] speed in tight curves (increased for faster turns)
+    cruise_speed: 0.25          # [m/s] nominal straight-line speed (hardware)
+    curve_speed: 0.15           # [m/s] speed in tight curves (increased for faster turns)
     lookahead_distance: 0.10    # [m] distance ahead on path for target point
     waypoint_tolerance: 0.15    # [m] cross-track snap distance
     trajectory_resolution: 0.02 # [m] dense trajectory point spacing
