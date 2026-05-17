@@ -11,7 +11,8 @@
  *
  * Serial Protocol (115200 baud):
  *   Receive:  <mode>,<value>,<servo_angle>\n
- *   Feedback: "FB:<rpm>,<ticks>,<ax>,<ay>,<az>,<gx>,<gy>,<gz>,<yaw>,<angle>,<ekf_x>,<ekf_y>,<ekf_theta>,<ekf_v>\n"
+ *   Feedback:
+ * "FB:<rpm>,<ticks>,<ax>,<ay>,<az>,<gx>,<gy>,<gz>,<yaw>,<angle>,<ekf_x>,<ekf_y>,<ekf_theta>,<ekf_v>\n"
  */
 
 #include <Servo.h>
@@ -60,12 +61,12 @@ float gyroZOffset = 0.0;
 
 // ==================== Timing ====================
 const unsigned long BAUD_RATE = 115200;
-const unsigned long FB_INTERVAL_MS = 50;   // 20Hz feedback
+const unsigned long FB_INTERVAL_MS = 50; // 20Hz feedback
 const unsigned long RPM_INTERVAL_MS = 100;
-const unsigned long IMU_INTERVAL_MS = 10;  // 100Hz IMU + EKF
+const unsigned long IMU_INTERVAL_MS = 10; // 100Hz IMU + EKF
 
 // ==================== Servo Constants ====================
-const int SERVO_CENTER = 82;  // Calibrated for rightward drift
+const int SERVO_CENTER = 82; // Calibrated for rightward drift
 const int SERVO_MIN = 37;
 const int SERVO_MAX = 127;
 
@@ -97,12 +98,12 @@ const float EKF_SIGMA_V = 0.1;      // m/s velocity noise
 const float EKF_SIGMA_OMEGA = 0.05; // rad/s gyro noise
 
 // Measurement noise variances
-const float EKF_R_ENCODER = 0.0025;  // (0.05)^2
-const float EKF_R_ACKERMANN = 0.04;  // (0.2)^2
-const float EKF_R_ZUPT = 0.000001;   // (0.001)^2
+const float EKF_R_ENCODER = 0.0025; // (0.05)^2
+const float EKF_R_ACKERMANN = 0.04; // (0.2)^2
+const float EKF_R_ZUPT = 0.000001;  // (0.001)^2
 
 // ZUPT threshold
-const float ZUPT_VEL_THRESH = 0.02;  // m/s
+const float ZUPT_VEL_THRESH = 0.02; // m/s
 
 // Temporary pre-predict theta for Ackermann
 float ekf_theta_pre = 0.0;
@@ -114,67 +115,74 @@ float ekf_encoder_velocity = 0.0;
 // All matrices stored as float[16] in row-major order
 // Index: M[r][c] = arr[r*4 + c]
 
-void mat4_zero(float* M) {
-  for (int i = 0; i < 16; i++) M[i] = 0.0;
+void mat4_zero(float *M) {
+  for (int i = 0; i < 16; i++)
+    M[i] = 0.0;
 }
 
-void mat4_identity(float* M) {
+void mat4_identity(float *M) {
   mat4_zero(M);
   M[0] = M[5] = M[10] = M[15] = 1.0;
 }
 
-void mat4_copy(float* dst, const float* src) {
-  for (int i = 0; i < 16; i++) dst[i] = src[i];
+void mat4_copy(float *dst, const float *src) {
+  for (int i = 0; i < 16; i++)
+    dst[i] = src[i];
 }
 
-void mat4_add(float* C, const float* A, const float* B) {
-  for (int i = 0; i < 16; i++) C[i] = A[i] + B[i];
+void mat4_add(float *C, const float *A, const float *B) {
+  for (int i = 0; i < 16; i++)
+    C[i] = A[i] + B[i];
 }
 
-void mat4_multiply(float* C, const float* A, const float* B) {
+void mat4_multiply(float *C, const float *A, const float *B) {
   float tmp[16];
   for (int r = 0; r < 4; r++) {
     for (int c = 0; c < 4; c++) {
       float s = 0.0;
       for (int k = 0; k < 4; k++) {
-        s += A[r*4+k] * B[k*4+c];
+        s += A[r * 4 + k] * B[k * 4 + c];
       }
-      tmp[r*4+c] = s;
+      tmp[r * 4 + c] = s;
     }
   }
   mat4_copy(C, tmp);
 }
 
-void mat4_transpose(float* T, const float* M) {
+void mat4_transpose(float *T, const float *M) {
   float tmp[16];
   for (int r = 0; r < 4; r++)
     for (int c = 0; c < 4; c++)
-      tmp[c*4+r] = M[r*4+c];
+      tmp[c * 4 + r] = M[r * 4 + c];
   mat4_copy(T, tmp);
 }
 
 // Multiply 4x4 matrix by 4x1 vector: out = M * v
-void mat4_vec_mul(float* out, const float* M, const float* v) {
+void mat4_vec_mul(float *out, const float *M, const float *v) {
   for (int r = 0; r < 4; r++) {
     out[r] = 0;
     for (int c = 0; c < 4; c++)
-      out[r] += M[r*4+c] * v[c];
+      out[r] += M[r * 4 + c] * v[c];
   }
 }
 
 // ==================== EKF Functions ====================
 
 void ekfInit() {
-  ekf_x[0] = 0; ekf_x[1] = 0; ekf_x[2] = 0; ekf_x[3] = 0;
+  ekf_x[0] = 0;
+  ekf_x[1] = 0;
+  ekf_x[2] = 0;
+  ekf_x[3] = 0;
   mat4_zero(ekf_P);
-  ekf_P[0]  = 0.01;  // x variance
-  ekf_P[5]  = 0.01;  // y variance
-  ekf_P[10] = 0.01;  // theta variance
-  ekf_P[15] = 0.01;  // v variance
+  ekf_P[0] = 0.01;  // x variance
+  ekf_P[5] = 0.01;  // y variance
+  ekf_P[10] = 0.01; // theta variance
+  ekf_P[15] = 0.01; // v variance
 }
 
 void ekfPredict(float gyro_z, float dt) {
-  if (dt <= 0.0 || dt > 1.0) return;
+  if (dt <= 0.0 || dt > 1.0)
+    return;
 
   float theta = ekf_x[2];
   float v = ekf_x[3];
@@ -185,22 +193,24 @@ void ekfPredict(float gyro_z, float dt) {
   ekf_theta_pre = theta;
 
   // State prediction: unicycle model
-  ekf_x[0] += v * ct * dt;        // x
-  ekf_x[1] += v * st * dt;        // y
-  ekf_x[2] += gyro_z * dt;        // theta (gyro already bias-corrected)
+  ekf_x[0] += v * ct * dt; // x
+  ekf_x[1] += v * st * dt; // y
+  ekf_x[2] += gyro_z * dt; // theta (gyro already bias-corrected)
   // ekf_x[3] unchanged (constant velocity model)
 
   // Normalize theta to [-PI, PI]
-  while (ekf_x[2] > PI)  ekf_x[2] -= 2.0 * PI;
-  while (ekf_x[2] < -PI) ekf_x[2] += 2.0 * PI;
+  while (ekf_x[2] > PI)
+    ekf_x[2] -= 2.0 * PI;
+  while (ekf_x[2] < -PI)
+    ekf_x[2] += 2.0 * PI;
 
   // Jacobian F = df/dx
   float F[16];
   mat4_identity(F);
-  F[0*4+2] = -v * st * dt;  // dx/dtheta
-  F[0*4+3] = ct * dt;       // dx/dv
-  F[1*4+2] = v * ct * dt;   // dy/dtheta
-  F[1*4+3] = st * dt;       // dy/dv
+  F[0 * 4 + 2] = -v * st * dt; // dx/dtheta
+  F[0 * 4 + 3] = ct * dt;      // dx/dv
+  F[1 * 4 + 2] = v * ct * dt;  // dy/dtheta
+  F[1 * 4 + 3] = st * dt;      // dy/dv
 
   // Noise input Jacobian G (4x2: maps [noise_v, noise_omega] to state)
   // G = [[ct*dt, 0], [st*dt, 0], [0, dt], [1, 0]]
@@ -213,16 +223,16 @@ void ekfPredict(float gyro_z, float dt) {
 
   float Q[16];
   mat4_zero(Q);
-  Q[0*4+0] = sv2 * gv0 * gv0;
-  Q[0*4+1] = sv2 * gv0 * gv1;
-  Q[0*4+3] = sv2 * gv0;
-  Q[1*4+0] = sv2 * gv1 * gv0;
-  Q[1*4+1] = sv2 * gv1 * gv1;
-  Q[1*4+3] = sv2 * gv1;
-  Q[2*4+2] = so2 * dt2;
-  Q[3*4+0] = sv2 * gv0;
-  Q[3*4+1] = sv2 * gv1;
-  Q[3*4+3] = sv2;
+  Q[0 * 4 + 0] = sv2 * gv0 * gv0;
+  Q[0 * 4 + 1] = sv2 * gv0 * gv1;
+  Q[0 * 4 + 3] = sv2 * gv0;
+  Q[1 * 4 + 0] = sv2 * gv1 * gv0;
+  Q[1 * 4 + 1] = sv2 * gv1 * gv1;
+  Q[1 * 4 + 3] = sv2 * gv1;
+  Q[2 * 4 + 2] = so2 * dt2;
+  Q[3 * 4 + 0] = sv2 * gv0;
+  Q[3 * 4 + 1] = sv2 * gv1;
+  Q[3 * 4 + 3] = sv2;
 
   // P = F * P * F^T + Q
   float FP[16], FT[16], FPFt[16];
@@ -240,18 +250,21 @@ void ekfScalarUpdate(float z_meas, int idx, float R) {
 
   // For heading (idx=2), normalize innovation
   if (idx == 2) {
-    while (innov > PI)  innov -= 2.0 * PI;
-    while (innov < -PI) innov += 2.0 * PI;
+    while (innov > PI)
+      innov -= 2.0 * PI;
+    while (innov < -PI)
+      innov += 2.0 * PI;
   }
 
   // S = P[idx][idx] + R
-  float S = ekf_P[idx*4+idx] + R;
-  if (S < 1e-12) return;
+  float S = ekf_P[idx * 4 + idx] + R;
+  if (S < 1e-12)
+    return;
 
   // Kalman gain K (4x1) = P[:,idx] / S
   float K[4];
   for (int i = 0; i < 4; i++) {
-    K[i] = ekf_P[i*4+idx] / S;
+    K[i] = ekf_P[i * 4 + idx] / S;
   }
 
   // State update: x += K * innov
@@ -261,46 +274,50 @@ void ekfScalarUpdate(float z_meas, int idx, float R) {
 
   // Covariance update: P -= K * P[idx,:] (Joseph form simplified)
   float P_row[4];
-  for (int c = 0; c < 4; c++) P_row[c] = ekf_P[idx*4+c];
+  for (int c = 0; c < 4; c++)
+    P_row[c] = ekf_P[idx * 4 + c];
   for (int r = 0; r < 4; r++) {
     for (int c = 0; c < 4; c++) {
-      ekf_P[r*4+c] -= K[r] * P_row[c];
+      ekf_P[r * 4 + c] -= K[r] * P_row[c];
     }
   }
 
   // Normalize theta
-  while (ekf_x[2] > PI)  ekf_x[2] -= 2.0 * PI;
-  while (ekf_x[2] < -PI) ekf_x[2] += 2.0 * PI;
+  while (ekf_x[2] > PI)
+    ekf_x[2] -= 2.0 * PI;
+  while (ekf_x[2] < -PI)
+    ekf_x[2] += 2.0 * PI;
 }
 
 void ekfUpdateVelocity(float v_measured) {
   ekfScalarUpdate(v_measured, 3, EKF_R_ENCODER);
 }
 
-void ekfZUPT() {
-  ekfScalarUpdate(0.0, 3, EKF_R_ZUPT);
-}
+void ekfZUPT() { ekfScalarUpdate(0.0, 3, EKF_R_ZUPT); }
 
 void ekfAckermannUpdate(int servo_angle, float dt) {
-  if (dt <= 0.0 || abs(ekf_x[3]) < 0.01) return;
+  if (dt <= 0.0 || abs(ekf_x[3]) < 0.01)
+    return;
 
   // Convert actual servo angle to steering angle in radians
   float steering_deg;
   if (servo_angle >= SERVO_CENTER) {
     // Servo above center = turn right (negative steering)
     steering_deg = -(float)(servo_angle - SERVO_CENTER) /
-                    (float)(SERVO_MAX - SERVO_CENTER) * MAX_STEERING_ANGLE_DEG;
+                   (float)(SERVO_MAX - SERVO_CENTER) * MAX_STEERING_ANGLE_DEG;
   } else {
     // Servo below center = turn left (positive steering)
     steering_deg = (float)(SERVO_CENTER - servo_angle) /
-                    (float)(SERVO_CENTER - SERVO_MIN) * MAX_STEERING_ANGLE_DEG;
+                   (float)(SERVO_CENTER - SERVO_MIN) * MAX_STEERING_ANGLE_DEG;
   }
   float steering_rad = steering_deg * DEG_TO_RAD;
 
   // Clamp steering
   float max_steer = MAX_STEERING_ANGLE_DEG * DEG_TO_RAD;
-  if (steering_rad > max_steer) steering_rad = max_steer;
-  if (steering_rad < -max_steer) steering_rad = -max_steer;
+  if (steering_rad > max_steer)
+    steering_rad = max_steer;
+  if (steering_rad < -max_steer)
+    steering_rad = -max_steer;
 
   // Ackermann heading rate
   float omega_ack = ekf_x[3] * tan(steering_rad) / WHEELBASE;
@@ -360,7 +377,7 @@ void initIMU() {
     uint8_t whoami = Wire.read();
     if (whoami == 0x68 || whoami == 0x98) {
       long zSum = 0;
-      int samples = 500;  // More samples = better bias calibration
+      int samples = 500; // More samples = better bias calibration
       for (int i = 0; i < samples; i++) {
         Wire.beginTransmission(MPU6050_ADDR);
         Wire.write(0x47);
@@ -385,19 +402,22 @@ void initIMU() {
 }
 
 void readIMU() {
-  if (!imuReady) return;
+  if (!imuReady)
+    return;
 
   Wire.beginTransmission(MPU6050_ADDR);
   Wire.write(0x3B);
   Wire.endTransmission(false);
   Wire.requestFrom(MPU6050_ADDR, 14, true);
 
-  if (Wire.available() < 14) return;
+  if (Wire.available() < 14)
+    return;
 
   int16_t rawAccX = (Wire.read() << 8) | Wire.read();
   int16_t rawAccY = (Wire.read() << 8) | Wire.read();
   int16_t rawAccZ = (Wire.read() << 8) | Wire.read();
-  Wire.read(); Wire.read(); // skip temp
+  Wire.read();
+  Wire.read(); // skip temp
 
   int16_t rawGyroX = (Wire.read() << 8) | Wire.read();
   int16_t rawGyroY = (Wire.read() << 8) | Wire.read();
@@ -415,16 +435,20 @@ void readIMU() {
 }
 
 void updateYaw(float dt) {
-  if (!imuReady || dt <= 0.0) return;
+  if (!imuReady || dt <= 0.0)
+    return;
   float gyroYawRate = imuGyroZ / DEG_TO_RAD;
   imuYaw += gyroYawRate * dt;
-  while (imuYaw > 180.0) imuYaw -= 360.0;
-  while (imuYaw < -180.0) imuYaw += 360.0;
+  while (imuYaw > 180.0)
+    imuYaw -= 360.0;
+  while (imuYaw < -180.0)
+    imuYaw += 360.0;
 }
 
 // ==================== PI Controller ====================
 int computePI(float targetRPM, float actualRPM, float dt) {
-  if (dt <= 0.0) return 0;
+  if (dt <= 0.0)
+    return 0;
   float error = targetRPM - actualRPM;
   piIntegral += error * dt;
   piIntegral = constrain(piIntegral, -PI_INTEGRAL_MAX, PI_INTEGRAL_MAX);
@@ -538,7 +562,8 @@ void loop() {
       float wheelCirc = 2.0 * PI * WHEEL_RADIUS_M;
       ekf_encoder_velocity = (currentRPM * wheelCirc) / 60.0;
       // Apply direction from encoder delta
-      if (deltaTicks < 0) ekf_encoder_velocity = -ekf_encoder_velocity;
+      if (deltaTicks < 0)
+        ekf_encoder_velocity = -ekf_encoder_velocity;
     }
 
     // EKF velocity measurement update
@@ -664,13 +689,13 @@ void sendFeedback() {
 
   // EKF state fields (appended)
   Serial.print(",");
-  Serial.print(ekf_x[0], 4);  // x
+  Serial.print(ekf_x[0], 4); // x
   Serial.print(",");
-  Serial.print(ekf_x[1], 4);  // y
+  Serial.print(ekf_x[1], 4); // y
   Serial.print(",");
-  Serial.print(ekf_x[2], 4);  // theta (rad)
+  Serial.print(ekf_x[2], 4); // theta (rad)
   Serial.print(",");
-  Serial.print(ekf_x[3], 4);  // v (m/s)
+  Serial.print(ekf_x[3], 4); // v (m/s)
 
   Serial.println();
 
