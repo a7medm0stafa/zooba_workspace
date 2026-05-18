@@ -38,6 +38,7 @@ class TelemetryPlotter(Node):
         self.imu_data = {'t': [], 'yaw': []}
 
         self.start_time = None
+        self.counts = {'target': 0, 'state': 0, 'feedback': 0, 'imu': 0}
 
         # Subscribers
         self.sub_target = self.create_subscription(
@@ -47,10 +48,10 @@ class TelemetryPlotter(Node):
         self.sub_feedback = self.create_subscription(
             VehicleFeedback, '/vehicle/feedback', self.feedback_cb, 10)
         self.sub_imu = self.create_subscription(
-            ImuData, '/imu/data', self.imu_cb, 10)
+            ImuData, '/vehicle/imu', self.imu_cb, 10)
 
         self.get_logger().info("Telemetry plotter started.")
-        self.get_logger().info("Listening to /path_planner/target, /vehicle/state, /vehicle/feedback, /imu/data")
+        self.get_logger().info("Listening to /path_planner/target, /vehicle/state, /vehicle/feedback, /vehicle/imu")
         self.get_logger().info("Press Ctrl+C to stop and display plots...")
 
     def get_time(self, msg_header=None):
@@ -60,6 +61,7 @@ class TelemetryPlotter(Node):
         return time.time() - self.start_time
 
     def target_cb(self, msg):
+        self.counts['target'] += 1
         t = self.get_time(msg.header)
         self.target_data['t'].append(t)
         self.target_data['x'].append(msg.x)
@@ -68,6 +70,7 @@ class TelemetryPlotter(Node):
         self.target_data['v'].append(msg.velocity)
 
     def state_cb(self, msg):
+        self.counts['state'] += 1
         t = self.get_time(msg.header)
         self.state_data['t'].append(t)
         self.state_data['x'].append(msg.x)
@@ -76,11 +79,13 @@ class TelemetryPlotter(Node):
         self.state_data['v'].append(msg.velocity)
 
     def feedback_cb(self, msg):
+        self.counts['feedback'] += 1
         t = self.get_time(msg.header)
         self.feedback_data['t'].append(t)
         self.feedback_data['v'].append(msg.actual_velocity)
 
     def imu_cb(self, msg):
+        self.counts['imu'] += 1
         t = self.get_time(msg.header)
         self.imu_data['t'].append(t)
         # Convert IMU degrees to radians for comparison
@@ -88,6 +93,12 @@ class TelemetryPlotter(Node):
 
 
 def plot_results(plotter):
+    print("\n--- Data Collection Summary ---")
+    print(f"Target points received:   {plotter.counts['target']}")
+    print(f"EKF State points rx'd:    {plotter.counts['state']}")
+    print(f"Encoder Feedback rx'd:    {plotter.counts['feedback']}")
+    print(f"IMU data points rx'd:     {plotter.counts['imu']}")
+    print("-------------------------------\n")
     print("Generating plots...")
     
     # Create a figure with 3 subplots
@@ -115,7 +126,7 @@ def plot_results(plotter):
                  'r--', label='Target Velocity')
     if plotter.feedback_data['t']:
         ax2.plot(plotter.feedback_data['t'], plotter.feedback_data['v'], 
-                 'g.', label='Unfiltered (Encoder)', alpha=0.5)
+                 'g-', label='Unfiltered (Encoder)', alpha=0.6, linewidth=1)
     if plotter.state_data['t']:
         ax2.plot(plotter.state_data['t'], plotter.state_data['v'], 
                  'b-', label='Filtered (EKF)', linewidth=2)
