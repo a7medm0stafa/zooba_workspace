@@ -11,10 +11,10 @@ path_planner_node:
   ros__parameters:
     cruise_speed: 0.25          # [m/s] nominal straight-line speed
     curve_speed: 0.15           # [m/s] speed in tight curves (increased for faster turns)
-    lookahead_distance: 0.10    # [m] distance ahead on path for target point
-    waypoint_tolerance: 0.15    # [m] cross-track snap distance
+    lookahead_distance: 0.05    # [m] distance ahead on path for target point
+    waypoint_tolerance: 0.05    # [m] cross-track snap distance
     trajectory_resolution: 0.02 # [m] dense trajectory point spacing
-    goal_tolerance: 0.15        # [m] distance to final point to declare "done"
+    goal_tolerance: 0.10        # [m] distance to final point to declare "done"
     max_lateral_accel: 0.2      # [m/s²] lateral acceleration limit for curves
     control_rate: 20.0          # [Hz] planner update rate
     start_delay: 10.0           # [s] wait before starting (let localization settle)
