@@ -263,25 +263,25 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
                               math.radians(0), math.radians(90), n_pts=8)
 
         # Top straight: Y=3.5, going west from X=1.5 to X=-1.5
-        wps.append((1.0, 3.6))
-        wps.append((0.0, 3.6))
-        wps.append((-1.0, 3.6))
-        wps.append((-1.5, 3.6))
+        wps.append((1.0, 3.65))
+        wps.append((0.0, 3.65))
+        wps.append((-1.0, 3.65))
+        wps.append((-1.5, 3.65))
 
         # Top-left corner: center (-1.5, 2.75), R=0.75
         # Arc from 90° to 180° (CCW, turning LEFT / south)
-        wps += _arc_waypoints(-1.5, 2.75, 0.75,
+        wps += _arc_waypoints(-1.6, 2.85, 0.75,
                               math.radians(90), math.radians(180), n_pts=8)
 
         # Left straight: X=-2.25, going south from Y=2.75 to Y=0.75
-        wps.append((-2.25, 2.25))
-        wps.append((-2.25, 1.75))
-        wps.append((-2.25, 1.25))
-        wps.append((-2.25, 0.75))
+        wps.append((-2.35, 2.25))
+        wps.append((-2.35, 1.75))
+        wps.append((-2.35, 1.25))
+        wps.append((-2.35, 0.75))
 
         # Bottom-left corner: center (-1.5, 0.75), R=0.75
         # Arc from 180° to 270° (CCW, turning LEFT / east)
-        wps += _arc_waypoints(-1.5, 0.75, 0.75,
+        wps += _arc_waypoints(-1.6, 0.75, 0.75,
                               math.radians(180), math.radians(270), n_pts=8)
 
         # Back to bottom straight, heading East
