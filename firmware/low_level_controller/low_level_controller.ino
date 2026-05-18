@@ -1,7 +1,7 @@
 /*
  * Low-Level Controller — Arduino Firmware (PI Speed Control + IMU + EKF)
  * ======================================================================
- * AHMED WAS HERE
+ * AHMED AND HAZIM WERE HERE, AND CLAUDE HELPED!
  * Receives serial commands from Raspberry Pi 4B and controls:
  *   - DC motor via L298N motor driver (open-loop PWM or closed-loop PI)
  *   - Servo motor (steering / heading angle)

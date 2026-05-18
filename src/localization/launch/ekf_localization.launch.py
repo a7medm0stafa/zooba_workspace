@@ -2,8 +2,7 @@
 EKF Localization Launch File
 ==============================
 FILE:    localization/launch/ekf_localization.launch.py
-STATUS:  UPDATED for EKF v2.0 (4-state filter)
-UPDATED: 2026-05-17
+STATUS:  NOT NEEDED FOR HARDWARE ANYMORE
 
 MODES:
     Hardware:   ros2 launch localization ekf_localization.launch.py

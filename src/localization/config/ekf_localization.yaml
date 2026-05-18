@@ -2,21 +2,7 @@
 # EKF Localization v3.0 — Default Parameters
 # =====================================================================
 # FILE:    localization/config/ekf_localization.yaml
-# STATUS:  5-state EKF with online gyro bias estimation
-# CREATED: 2026-05-17
-#
-# TUNING GUIDELINES:
-#   sigma_velocity:       ↑ = faster adaptation, noisier position
-#                         ↓ = smoother position, slower adaptation
-#   sigma_yaw_rate:       ↑ = heading tracks gyro less rigidly
-#                         ↓ = heading trusts gyro more
-#   sigma_bias:           ↑ = bias adapts faster (good for variable vibrations)
-#                         ↓ = bias changes slowly (stable but slow convergence)
-#   sigma_encoder:        ↑ = distrust encoder velocity
-#                         ↓ = trust encoder velocity
-#   sigma_ackermann:      ↑ = trust gyro more for heading rate
-#                         ↓ = trust Ackermann model more (faster bias learning)
-#   sigma_zupt:           keep very small — stationary is high confidence
+# STATUS:  NOT NEEDED FOR HARDWARE ANYMORE LESA BAYEZ
 # =====================================================================
 
 ekf_localization_node:

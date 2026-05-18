@@ -1,4 +1,5 @@
 """
+Team 17 was here, thank you claude!!
 Path Planner Node — Cubic Spline Trajectory Generator
 ======================================================
 Generates smooth (x, y, heading, velocity) trajectories for three tracks
@@ -259,6 +260,7 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
 
         # Top-right corner: center (1.5, 2.75), R=0.75
         # Arc from 0° to 90° (CCW, turning LEFT / west)
+        #l3bna fel way points 3shan tozbat fel corner
         wps += _arc_waypoints(1.5, 2.85, 0.75,
                               math.radians(0), math.radians(90), n_pts=8)
 
