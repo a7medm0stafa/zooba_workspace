@@ -281,8 +281,8 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
 
         # Bottom-left corner: center (-1.5, 0.75), R=0.75
         # Arc from 180° to 270° (CCW, turning LEFT / east)
-        wps += _arc_waypoints(-1.6, 0.75, 0.75,
-                              math.radians(180), math.radians(260), n_pts=8)
+        wps += _arc_waypoints(-1.6, 0.85, 0.75,
+                              math.radians(180), math.radians(270), n_pts=8)
 
         # Back to bottom straight, heading East
         wps.append((-1.0, 0.0))
