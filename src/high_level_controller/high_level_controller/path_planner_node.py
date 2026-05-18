@@ -208,17 +208,19 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
             (2.0,  0.1875),        # anchor straight
             (2.5,  0.1875),        # approach zone before obstacle 1
             (2.8,  0.1875),        # hold lane until last moment
-            (3.2,  0.0),           # begin lane change to right
-            (3.6, -0.15),        # in right lane before obstacle 1
-            (4.0, -0.15),        # passing obstacle 1
-            (4.5, -0.15),        # anchor right lane
-            (5.0, -0.15),        # cruising right lane
-            (5.5, -0.15),        # anchor right lane
-            (6.0, -0.15),        # anchor right lane
-            (6.5, -0.15),        # approach zone before obstacle 2
-            (6.8, -0.15),        # hold lane until last moment
-            (7.2,  0.0),           # begin lane change to left
-            (7.6,  0.3),        # in left lane before obstacle 2
+            (3.2,  0.1875),           # begin lane change to right
+            (3.6, 0.0), 
+            (3.8, -0.18),       # in right lane before obstacle 1
+            (4.0, -0.18),        # passing obstacle 1
+            (4.5, -0.18),        # anchor right lane
+            (5.0, -0.18),        # cruising right lane
+            (5.5, -0.18),        # anchor right lane
+            (6.0, -0.18),        # anchor right lane
+            (6.5, -0.18),        # approach zone before obstacle 2
+            (6.8, -0.18),        # hold lane until last moment
+            (7.2,  -0.18),           # begin lane change to left
+            (7.4,  -0.18), 
+            (7.6,  0.0),        # in left lane before obstacle 2
             (8.0,  0.3),        # passing obstacle 2
             (8.5,  0.3),        # anchor left lane
             (9.0,  0.3),        # past obstacle 2
