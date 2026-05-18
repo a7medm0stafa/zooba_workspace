@@ -32,9 +32,9 @@ lateral_control_node:
     desired_y: 0.0              # Target Y position (lane) [m]
     desired_heading: 0.0        # Target heading [degrees] (0 = +X)
     k_heading: 2.0              # Heading proportional gain (↓ better heading/CTE balance)
-    k_stanley: 6.0              # Cross-track gain (↑ more aggressive CTE correction)
+    k_stanley: 4.5             # Cross-track gain (↑ more aggressive CTE correction)
     k_soft: 1.0                 # Softening constant (avoids div-by-zero)
-    k_d_heading: 0.15           # Heading derivative damping (↑ more damping for overshoot)
+    k_d_heading: 0.05           # Heading derivative damping (↑ more damping for overshoot)
     max_steering_angle: 45.0    # Steering output saturation [degrees]
     steering_offset: 0.0       # MUST BE ZERO — offset here poisons the EKF's
                                  # Ackermann model. Use servo_center in the LLC
