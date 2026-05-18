@@ -125,12 +125,12 @@ def plot_results(plotter):
     if plotter.target_data['t']:
         ax2.plot(plotter.target_data['t'], plotter.target_data['v'], 
                  'r--', label='Target Velocity')
-    if plotter.feedback_data['t']:
-        ax2.plot(plotter.feedback_data['t'], plotter.feedback_data['v'], 
-                 'g-', label='Unfiltered (Encoder)', alpha=0.6, linewidth=1)
     if plotter.state_data['t']:
         ax2.plot(plotter.state_data['t'], plotter.state_data['v'], 
                  'b-', label='Filtered (EKF)', linewidth=2)
+    if plotter.feedback_data['t']:
+        ax2.plot(plotter.feedback_data['t'], plotter.feedback_data['v'], 
+                 'g.', label='Unfiltered (Encoder)', markersize=3, zorder=5)
     ax2.set_title('Velocity: Filtered vs Unfiltered')
     ax2.set_xlabel('Time [s]')
     ax2.set_ylabel('Velocity [m/s]')
@@ -146,16 +146,16 @@ def plot_results(plotter):
             ax3.plot(plotter.target_data['t'], target_yaw, 'r--', label='Target Yaw')
         except:
             pass
-    if plotter.imu_data['t']:
-        try:
-            imu_yaw = np.unwrap(plotter.imu_data['yaw'])
-            ax3.plot(plotter.imu_data['t'], imu_yaw, 'g.', label='Unfiltered (IMU)', alpha=0.5)
-        except:
-            pass
     if plotter.state_data['t']:
         try:
             state_yaw = np.unwrap(plotter.state_data['yaw'])
             ax3.plot(plotter.state_data['t'], state_yaw, 'b-', label='Filtered (EKF)', linewidth=2)
+        except:
+            pass
+    if plotter.imu_data['t']:
+        try:
+            imu_yaw = np.unwrap(plotter.imu_data['yaw'])
+            ax3.plot(plotter.imu_data['t'], imu_yaw, 'g.', label='Unfiltered (IMU)', markersize=3, zorder=5)
         except:
             pass
     ax3.set_title('Heading: Filtered vs Unfiltered')
