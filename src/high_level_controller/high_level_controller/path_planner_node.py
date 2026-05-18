@@ -285,8 +285,8 @@ def get_track_waypoints(track_name, start_x=0.0, start_y=0.0):
                               math.radians(180), math.radians(270), n_pts=8)
 
         # Back to bottom straight, heading East
-        wps.append((-1.0, 0.0))
-        wps.append((0.0, 0.0))          # BACK TO START (close the loop)
+        wps.append((-1.0, 0.1))
+        wps.append((0.0, 0.1))          # BACK TO START (close the loop)
 
         # Remove any near-duplicate consecutive points
         wps = _deduplicate_waypoints(wps)
