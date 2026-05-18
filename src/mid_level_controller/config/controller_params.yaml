@@ -32,9 +32,9 @@ lateral_control_node:
     desired_y: 0.0              # Target Y position (lane) [m]
     desired_heading: 0.0        # Target heading [degrees] (0 = +X)
     k_heading: 2.0              # Heading proportional gain (↓ better heading/CTE balance)
-    k_stanley: 4.5              # Cross-track gain (↑ more aggressive CTE correction)
+    k_stanley: 6.0              # Cross-track gain (↑ more aggressive CTE correction)
     k_soft: 1.0                 # Softening constant (avoids div-by-zero)
-    k_d_heading: 0.05           # Heading derivative damping (↓ faster response)
+    k_d_heading: 0.15           # Heading derivative damping (↑ more damping for overshoot)
     max_steering_angle: 45.0    # Steering output saturation [degrees]
     steering_offset: 0.0       # MUST BE ZERO — offset here poisons the EKF's
                                  # Ackermann model. Use servo_center in the LLC
@@ -66,7 +66,7 @@ path_planner_node:
   ros__parameters:
     cruise_speed: 0.25          # [m/s] nominal straight-line speed (hardware)
     curve_speed: 0.15           # [m/s] speed in tight curves (increased for faster turns)
-    lookahead_distance: 0.10    # [m] distance ahead on path for target point
+    lookahead_distance: 0.25    # [m] distance ahead on path for target point (↑ earlier turning)
     waypoint_tolerance: 0.15    # [m] cross-track snap distance
     trajectory_resolution: 0.02 # [m] dense trajectory point spacing
     goal_tolerance: 0.05        # [m] distance to final point to declare "done"
