@@ -2,6 +2,7 @@
 """
 Telemetry Plotting Script for Zooba
 ====================================
+UPDATED
 Subscribes to live ROS 2 topics to collect:
 1. Target Trajectory (/path_planner/target)
 2. Filtered EKF State (/vehicle/state)
