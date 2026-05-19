@@ -361,6 +361,7 @@ class PathPlannerNode(Node):
 
         self.current_target_idx = 0
         self.goal_reached = False
+        self.lap_count = 0
         self.started = False
         self.start_time = None
 
@@ -568,18 +569,17 @@ class PathPlannerNode(Node):
                 return
         else:
             # Closed track: check if we've gone past ~90% of the path
-            # AND are back near the start
+            # AND are back near the start → start a new lap (don't stop)
             progress = self.current_target_idx / self.n_traj_pts
             if progress > 0.85:
                 dx_start = self.traj_x[0] - self.current_x
                 dy_start = self.traj_y[0] - self.current_y
                 dist_to_start = math.sqrt(dx_start**2 + dy_start**2)
                 if dist_to_start < self.goal_tol:
-                    self.goal_reached = True
+                    self.lap_count += 1
                     self.get_logger().info(
-                        f'🏁 LAP COMPLETE! Distance to start: {dist_to_start:.3f}m')
-                    self._set_speed(0.0)
-                    return
+                        f'🏁 LAP {self.lap_count} COMPLETE! Starting next lap...')
+                    self.current_target_idx = 0  # reset to start of trajectory
 
         # --- Send commands to mid-level controllers ---
         target_heading_deg = math.degrees(target_heading)
